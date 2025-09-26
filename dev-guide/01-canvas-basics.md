@@ -345,240 +345,173 @@ Excalidraw 的核心价值：
 只有三个答案都是"是"，才考虑添加。
 ```
 
-### 5.2 关键技术点解析
+### 5.3 团队文化的建立
 
-```javascript
-// 1. 响应式尺寸计算
-function calculateCanvasSize() {
-  // 获取容器尺寸
-  const container = canvas.parentElement;
-  const rect = container.getBoundingClientRect();
+#### 🤝 **如何在团队中推广简约设计文化**
 
-  // 考虑边距和最大尺寸
-  const padding = 40;
-  const maxWidth = 1200;
-  const maxHeight = 800;
-
-  return {
-    width: Math.min(rect.width - padding, maxWidth),
-    height: Math.min(rect.height - padding, maxHeight)
-  };
-}
-
-// 2. 性能优化：节流 resize 事件
-function throttle(func, limit) {
-  let inThrottle;
-  return function() {
-    const args = arguments;
-    const context = this;
-    if (!inThrottle) {
-      func.apply(context, args);
-      inThrottle = true;
-      setTimeout(() => inThrottle = false, limit);
-    }
-  };
-}
-
-window.addEventListener('resize', throttle(() => {
-  canvas.resize();
-}, 100));
-
-// 3. 内存管理
-class CanvasManager {
-  constructor() {
-    this.resources = new Set();
-  }
-
-  createImageBitmap(blob) {
-    return createImageBitmap(blob).then(bitmap => {
-      this.resources.add(bitmap);
-      return bitmap;
-    });
-  }
-
-  cleanup() {
-    this.resources.forEach(resource => {
-      if (resource.close) resource.close();
-    });
-    this.resources.clear();
-  }
-}
+**建立设计原则共识：**
+```
+团队原则制定：
+1. 明确产品的核心价值观
+2. 制定功能添加的评估标准
+3. 建立"说不"的勇气和机制
+4. 定期回顾和优化现有功能
 ```
 
-## 6. Excalidraw 中的应用
+**设计评审的改进：**
+```
+传统评审：关注功能完整性
+简约设计评审：关注价值创造
 
-让我们看看 Excalidraw 是如何处理 Canvas 基础设置的：
-
-```typescript
-// packages/excalidraw/scene/Scene.tsx
-export class Scene {
-  private canvas: HTMLCanvasElement;
-  private rc: RoughCanvas;
-  private contextSettings = {
-    alpha: true,
-    desynchronized: true,  // 性能优化：异步渲染
-    colorSpace: "srgb",
-    willReadFrequently: false
-  };
-
-  constructor(canvas: HTMLCanvasElement) {
-    this.canvas = canvas;
-    this.setupCanvas();
-  }
-
-  private setupCanvas() {
-    const context = this.canvas.getContext("2d", this.contextSettings);
-
-    // 设置默认样式
-    context.imageSmoothingEnabled = true;
-    context.imageSmoothingQuality = "high";
-
-    // 处理高 DPI
-    this.handleHighDPI();
-
-    // 初始化 RoughJS
-    this.rc = rough.canvas(this.canvas);
-  }
-
-  private handleHighDPI() {
-    const dpr = window.devicePixelRatio || 1;
-    const rect = this.canvas.getBoundingClientRect();
-
-    // 设置实际尺寸
-    this.canvas.width = rect.width * dpr;
-    this.canvas.height = rect.height * dpr;
-
-    // 缩放上下文
-    const context = this.canvas.getContext("2d");
-    context.scale(dpr, dpr);
-
-    // 设置 CSS 尺寸
-    this.canvas.style.width = rect.width + "px";
-    this.canvas.style.height = rect.height + "px";
-  }
-}
+评审问题：
+- 这个设计解决了什么问题？
+- 用户真的需要这个功能吗？
+- 有没有更简单的解决方案？
+- 这会让系统变得复杂吗？
 ```
 
-## 7. 练习题
+## 6. 思考与应用
 
-### 7.1 基础练习
+### 6.1 深度思考题
 
-1. **创建自适应画布**
-   - 创建一个全屏 Canvas
-   - 处理窗口 resize 事件
-   - 正确处理高 DPI 显示
+1. **设计哲学思辨**
+   - 简约设计在什么情况下可能不适用？
+   - 如何平衡用户需求的多样性与产品的专注性？
+   - "功能越多越好"与"少即是多"如何取舍？
 
-2. **坐标系统可视化**
-   - 绘制坐标轴和网格
-   - 显示鼠标当前坐标
-   - 实现坐标变换演示
+2. **实践应用思考**
+   - 在你的项目中，哪些功能可能是"伪需求"？
+   - 如何说服团队删除一个已有的功能？
+   - 如何衡量简约设计的成功？
 
-3. **像素操作**
-   - 实现图片灰度化
-   - 实现马赛克效果
-   - 实现简单的滤镜
+3. **设计价值观辨析**
+   - 用户要求的功能与设计理念冲突时如何处理？
+   - 竞品有的功能，我们一定要有吗？
+   - 如何在商业需求和设计理念间找到平衡？
 
-### 7.2 进阶练习
+### 6.2 实践练习
 
-1. **性能测试工具**
-   ```javascript
-   class PerformanceMonitor {
-     constructor(canvas) {
-       this.canvas = canvas;
-       this.ctx = canvas.getContext('2d');
-       this.metrics = {
-         fps: 0,
-         drawCalls: 0,
-         renderTime: 0
-       };
-     }
+#### 🎯 **练习1：核心价值提取**
+```
+选择一个你熟悉的产品，分析：
+1. 它的核心价值是什么？
+2. 哪些功能支持了这个价值？
+3. 哪些功能可能偏离了核心价值？
+4. 如果你是产品负责人，会做什么调整？
+```
 
-     // 实现 FPS 监控
-     // 实现绘制调用计数
-     // 实现渲染时间统计
-   }
-   ```
+#### 📐 **练习2：简化设计挑战**
+```
+设计任务：
+设计一个待办事项应用，要求：
+- 只有5个核心功能
+- 界面元素不超过8个
+- 新用户5分钟内必须学会使用
 
-2. **Canvas 管理器**
-   ```javascript
-   class CanvasLayerManager {
-     constructor(container) {
-       this.layers = new Map();
-       this.container = container;
-     }
+思考：如何通过约束激发创新？
+```
 
-     // 实现多层 Canvas 管理
-     // 实现层的添加、删除、排序
-     // 实现层的显示/隐藏
-   }
-   ```
+## 7. 本章总结：简约设计的力量
 
-## 8. 思考题
+### 7.1 核心设计价值观
 
-1. **为什么 Excalidraw 选择 Canvas 而不是 SVG？**
-   - 考虑性能因素
-   - 考虑功能需求
-   - 考虑导出需求
+Excalidraw 的成功不在于技术的复杂性，而在于设计哲学的一致性：
 
-2. **如何在 Canvas 中实现事件系统？**
-   - Canvas 本身不支持对象级事件
-   - 需要手动实现碰撞检测
-   - 需要维护元素的空间索引
+**五大设计原则：**
+1. **简约主义**：做减法比做加法更难，也更有价值
+2. **用户中心**：工具服务于表达，而非展示技术能力
+3. **直觉设计**：降低学习成本，提升使用体验
+4. **性能优先**：流畅体验胜过功能丰富性
+5. **约束创新**：有意义的限制激发无限创造力
 
-3. **设备像素比（DPR）为什么重要？**
-   - 对渲染质量的影响
-   - 对性能的影响
-   - 对内存使用的影响
+### 7.2 设计思维的转变
 
-4. **Canvas 的性能瓶颈在哪里？**
-   - 绘制调用次数
-   - 状态切换成本
-   - 像素填充率
+**从功能思维到价值思维：**
+```
+传统思维："我们能做什么？"
+设计思维："用户需要什么？"
 
-5. **如何选择合适的 Canvas 尺寸？**
-   - 平衡质量和性能
-   - 考虑目标设备
-   - 动态调整策略
+传统思维："如何增加功能？"
+设计思维："如何减少认知负担？"
 
-## 9. 总结
+传统思维："竞品有的我们也要有"
+设计思维："什么是我们的独特价值？"
+```
 
-### 核心要点
+### 7.3 实际应用指南
 
-1. **Canvas 基础**
-   - Canvas 是位图绘制 API，适合复杂动画和大量图形
-   - 与 SVG 和 DOM 相比，Canvas 在特定场景下性能更好
-   - 理解坐标系统和像素操作是基础
+**立即可以应用的方法：**
 
-2. **高清适配**
-   - 必须处理设备像素比（DPR）
-   - 物理像素 vs CSS 像素的区别
-   - 正确的缩放和坐标转换
+1. **功能审查清单**
+   - 每个功能都要证明其存在价值
+   - 删除使用率低于5%的功能
+   - 合并相似功能，减少选择困难
 
-3. **性能考虑**
-   - 选择合适的上下文选项
-   - 合理设置 Canvas 尺寸
-   - 注意内存管理和资源清理
+2. **用户测试指标**
+   - 新用户5分钟学会率
+   - 核心任务完成时间
+   - 用户满意度 vs 功能数量的关系
 
-4. **实战技巧**
-   - 响应式设计的实现
-   - 事件处理的坐标转换
-   - 多层渲染的管理
+3. **团队决策原则**
+   - 制定明确的"不做清单"
+   - 建立功能添加的严格评审机制
+   - 定期进行"减法设计"回顾
 
-### 下一步
+## 8. 设计启发与展望
 
-在掌握了 Canvas 基础后，下一章我们将学习：
-- Canvas 的各种绘图 API
-- 路径的概念和使用
-- 样式和效果的应用
-- 实现一个简单的绘图工具
+### 8.1 关键洞察
 
-## 10. 参考资源
+**伟大产品的共同特征：**
 
-- [MDN Canvas API](https://developer.mozilla.org/zh-CN/docs/Web/API/Canvas_API)
-- [Canvas Deep Dive](https://joshondesign.com/p/books/canvasdeepdive/)
-- [Excalidraw 源码](https://github.com/excalidraw/excalidraw)
-- [HTML5 Canvas Tutorials](https://www.html5canvastutorials.com/)
+1. **专注的力量**
+   - Excalidraw 专注于"想法表达"
+   - Instagram 专注于"瞬间分享"
+   - Slack 专注于"团队沟通"
+
+2. **约束的智慧**
+   - Twitter 的140字符限制激发了创造力
+   - Excalidraw 的简单工具促进了表达
+   - 约束帮助用户和团队保持专注
+
+3. **体验的优先级**
+   - 用户感受 > 技术炫技
+   - 直觉理解 > 功能完整
+   - 情感连接 > 理性分析
+
+### 8.2 对其他领域的启发
+
+**简约设计原则的广泛应用：**
+
+- **API 设计**：少数强大的接口 > 众多细分的方法
+- **团队管理**：专注核心目标 > 同时追求多个目标
+- **个人效率**：深度工作 > 多任务并行
+- **产品策略**：差异化价值 > 功能对标
 
 ---
 
-**下一章**：[Canvas 图形绘制 →](./02-canvas-drawing.md)
+**🎆 本章核心启示**：
+
+> 简约不是缺少，而是恰到好处。
+> 伟大的设计不在于做了什么，而在于选择不做什么。
+> Excalidraw 的成功证明：**约束能够释放创造力**。
+
+### 继续学习之旅
+
+在掌握了简约设计的核心哲学后，下一章我们将探索：
+- **协作优先**：如何在产品设计中体现协作精神
+- **开放源码**：为什么透明是最好的商业策略
+- **数据主权**：用户数据安全的设计哲学
+
+## 推荐阅读
+
+### 设计哲学经典
+- [The Design of Everyday Things](https://www.nngroup.com/books/design-everyday-things/) - Don Norman 设计心理学
+- [Simple and Usable](https://www.simplicitybook.com/) - Giles Colborne 简约设计原则
+
+### 产品案例研究
+- [Excalidraw 官方博客](https://blog.excalidraw.com) - 设计决策分享
+- [Linear Method](https://linear.app/method) - 简约产品设计案例
+
+---
+
+**下一章**：[Chapter 2: 协作优先 - 产品价值观 →](./02-canvas-drawing.md)
