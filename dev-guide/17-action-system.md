@@ -31,36 +31,77 @@ Action系统层次结构
 ### Action接口定义
 
 ```typescript
-// packages/excalidraw/actions/types.ts
-export interface ExcalidrawAction {
+// packages/excalidraw/actions/types.ts - 实际源码接口
+export interface Action {
   name: ActionName;
-  icon?: string;
+
+  // 动态标签（支持函数式计算）
+  label: string | ((
+    elements: readonly ExcalidrawElement[],
+    appState: Readonly<AppState>,
+    app: AppClassProperties,
+  ) => string);
+
+  // 搜索关键词
   keywords?: string[];
-  perform: ActionFunction;
+
+  // 动态图标（支持React组件）
+  icon?: React.ReactNode | ((
+    appState: UIAppState,
+    elements: readonly ExcalidrawElement[],
+  ) => React.ReactNode);
+
+  // UI组件（用于自定义面板）
+  PanelComponent?: React.FC<PanelComponentProps>;
+
+  // 核心执行函数
+  perform: ActionFn;
+
+  // 按键优先级（处理冲突）
+  keyPriority?: number;
+
+  // 键盘快捷键测试
+  keyTest?: (
+    event: React.KeyboardEvent | KeyboardEvent,
+    appState: AppState,
+    elements: readonly ExcalidrawElement[],
+    app: AppClassProperties,
+  ) => boolean;
+
+  // 可用性条件判断
   predicate?: (
     elements: readonly ExcalidrawElement[],
     appState: AppState,
-    props: any
+    props: any,
+    app: AppClassProperties,
   ) => boolean;
-  keyTest?: (event: KeyboardEvent | React.KeyboardEvent) => boolean;
-  contextItemLabel?: string;
-  commitToHistory?: boolean;
 }
 
-export type ActionFunction = (
-  elements: readonly ExcalidrawElement[],
+// Action执行函数类型
+type ActionFn = (
+  elements: readonly OrderedExcalidrawElement[],
   appState: Readonly<AppState>,
   formData: any,
-  app: AppClassProperties
+  app: AppClassProperties,
 ) => ActionResult | Promise<ActionResult>;
 
-export interface ActionResult {
-  elements?: readonly ExcalidrawElement[] | null;
-  appState?: Partial<AppState> | null;
-  files?: BinaryFiles | null;
-  commitToHistory?: boolean;
-  syncableElements?: readonly ExcalidrawElement[];
-}
+// Action执行结果类型
+export type ActionResult =
+  | {
+      elements?: readonly ExcalidrawElement[] | null;
+      appState?: Partial<AppState> | null;
+      files?: BinaryFiles | null;
+      captureUpdate: CaptureUpdateActionType;  // 历史记录捕获类型
+      replaceFiles?: boolean;
+    }
+  | false; // false表示阻止执行
+
+// 历史记录捕获类型
+export type CaptureUpdateActionType =
+  | "never"          // 不记录到历史
+  | "always"         // 总是记录
+  | "skipIfEmpty"    // 空变更时跳过
+  | "incremental";   // 增量记录
 
 export type ActionName =
   | "copy"

@@ -67,7 +67,7 @@ function renderInteractiveCanvas() {
 ### 源码分析
 
 ```typescript
-// packages/excalidraw/scene/Renderer.ts
+// packages/excalidraw/scene/Renderer.ts - 实际源码
 export class Renderer {
   private scene: Scene;
 
@@ -75,50 +75,131 @@ export class Renderer {
     this.scene = scene;
   }
 
-  // 核心方法：获取可渲染元素
-  // 使用 memoize 缓存结果，避免重复计算
-  public getRenderableElements = memoize((renderConfig: {
-    zoom: Zoom;
-    offsetLeft: number;
-    offsetTop: number;
-    scrollX: number;
-    scrollY: number;
-    height: number;
-    width: number;
-    editingTextElement: NonDeletedExcalidrawElement | null;
-    newElementId: string | null;
-    sceneNonce: number | undefined;
-  }) => {
-    // 1. 获取场景中所有非删除元素
-    const elements = this.scene.getNonDeletedElements();
-
-    // 2. 构建元素Map，处理特殊状态（编辑中、新建等）
-    const elementsMap = getRenderableElements({
-      elements,
-      editingTextElement: renderConfig.editingTextElement,
-      newElementId: renderConfig.newElementId,
-    });
-
-    // 3. 视口裁剪：只返回可见元素
-    const visibleElements = getVisibleCanvasElements({
+  // 核心方法：获取可渲染元素（带缓存）
+  public getRenderableElements = (() => {
+    // 内部函数：获取视口内可见元素
+    const getVisibleCanvasElements = ({
       elementsMap,
-      zoom: renderConfig.zoom,
-      offsetLeft: renderConfig.offsetLeft,
-      offsetTop: renderConfig.offsetTop,
-      scrollX: renderConfig.scrollX,
-      scrollY: renderConfig.scrollY,
-      height: renderConfig.height,
-      width: renderConfig.width,
-    });
+      zoom,
+      offsetLeft,
+      offsetTop,
+      scrollX,
+      scrollY,
+      height,
+      width,
+    }: {
+      elementsMap: NonDeletedElementsMap;
+      zoom: AppState["zoom"];
+      offsetLeft: AppState["offsetLeft"];
+      offsetTop: AppState["offsetTop"];
+      scrollX: AppState["scrollX"];
+      scrollY: AppState["scrollY"];
+      height: AppState["height"];
+      width: AppState["width"];
+    }): readonly NonDeletedExcalidrawElement[] => {
+      const visibleElements: NonDeletedExcalidrawElement[] = [];
 
-    return {
-      elementsMap,      // 所有可渲染元素
-      visibleElements,  // 视口内可见元素
+      // 视口剔除：只保留在视口内的元素
+      for (const element of elementsMap.values()) {
+        if (
+          isElementInViewport(
+            element,
+            width,
+            height,
+            { zoom, offsetLeft, offsetTop, scrollX, scrollY },
+            elementsMap,
+          )
+        ) {
+          visibleElements.push(element);
+        }
+      }
+      return visibleElements;
     };
-  });
 
-  // 销毁方法：清理缓存
+    // 内部函数：过滤可渲染元素
+    const getRenderableElements = ({
+      elements,
+      editingTextElement,
+      newElementId,
+    }: {
+      elements: readonly NonDeletedExcalidrawElement[];
+      editingTextElement: AppState["editingTextElement"];
+      newElementId: ExcalidrawElement["id"] | undefined;
+    }) => {
+      const elementsMap = toBrandedType<RenderableElementsMap>(new Map());
+
+      for (const element of elements) {
+        // 跳过正在创建的新元素
+        if (newElementId === element.id) {
+          continue;
+        }
+
+        // 跳过正在编辑的文本元素（远程渲染）
+        if (
+          !editingTextElement ||
+          editingTextElement.type !== "text" ||
+          element.id !== editingTextElement.id
+        ) {
+          elementsMap.set(element.id, element);
+        }
+      }
+      return elementsMap;
+    };
+
+    // 返回带缓存的处理函数
+    return memoize(({
+      zoom,
+      offsetLeft,
+      offsetTop,
+      scrollX,
+      scrollY,
+      height,
+      width,
+      editingTextElement,
+      newElementId,
+      sceneNonce: _sceneNonce, // 缓存失效随机数
+    }: {
+      zoom: AppState["zoom"];
+      offsetLeft: AppState["offsetLeft"];
+      offsetTop: AppState["offsetTop"];
+      scrollX: AppState["scrollX"];
+      scrollY: AppState["scrollY"];
+      height: AppState["height"];
+      width: AppState["width"];
+      editingTextElement: AppState["editingTextElement"];
+      newElementId: ExcalidrawElement["id"] | undefined;
+      sceneNonce: ReturnType<InstanceType<typeof Scene>["getSceneNonce"]>;
+    }) => {
+      // 从场景获取非删除元素
+      const elements = this.scene.getNonDeletedElements();
+
+      // 过滤可渲染元素
+      const elementsMap = getRenderableElements({
+        elements,
+        editingTextElement,
+        newElementId,
+      });
+
+      // 视口剔除
+      const visibleElements = getVisibleCanvasElements({
+        elementsMap,
+        zoom,
+        offsetLeft,
+        offsetTop,
+        scrollX,
+        scrollY,
+        height,
+        width,
+      });
+
+      return { elementsMap, visibleElements };
+    });
+  })();
+
+  // 销毁方法：清理缓存和取消节流
   public destroy() {
+    renderInteractiveSceneThrottled.cancel();
+    renderStaticSceneThrottled.cancel();
     this.getRenderableElements.clear();
   }
 }

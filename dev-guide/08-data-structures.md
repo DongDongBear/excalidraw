@@ -71,14 +71,14 @@ export interface Zoom {
 ### 基础元素接口
 
 ```typescript
-// packages/excalidraw/element/types.ts
-export interface ExcalidrawGenericElement {
+// packages/element/src/types.ts - 实际源码定义
+type _ExcalidrawElementBase = Readonly<{
   id: string;              // 唯一标识符
   x: number;               // X 坐标
   y: number;               // Y 坐标
   width: number;           // 宽度
   height: number;          // 高度
-  angle: number;           // 旋转角度（弧度）
+  angle: Radians;          // 旋转角度（弧度类型）
   strokeColor: string;     // 边框颜色
   backgroundColor: string; // 填充颜色
   fillStyle: FillStyle;    // 填充样式
@@ -86,93 +86,135 @@ export interface ExcalidrawGenericElement {
   strokeStyle: StrokeStyle; // 边框样式
   roughness: number;       // 手绘粗糙度
   opacity: number;         // 透明度
-  seed: number;            // 随机种子
-  versionNonce: number;    // 版本随机数
+  seed: number;            // 随机种子（用于 roughjs 形状生成）
+  version: number;         // 版本号（用于协作）
+  versionNonce: number;    // 版本随机数（用于确定性协调）
   isDeleted: boolean;      // 删除标记
   link: string | null;     // 链接地址
   locked: boolean;         // 锁定状态
-  groupIds: readonly string[]; // 所属组ID
+  groupIds: readonly GroupId[]; // 所属组ID（从深到浅排序）
   frameId: string | null;  // 所属框架ID
-  index: FractionalIndex;  // 分数索引（用于排序）
+  index: FractionalIndex | null;  // 分数索引（用于多人排序，可能为null）
   roundness: {             // 圆角设置
     type: RoundnessType;
     value?: number;
   } | null;
-  boundElements: readonly Binding[] | null; // 绑定元素
-  updated: number;         // 更新时间戳
-  customData?: Record<string, any>; // 自定义数据
-}
+  boundElements: readonly BoundElement[] | null; // 绑定的元素
+  updated: number;         // 最后更新时间戳（ms）
+  customData?: Record<string, any>; // 自定义数据扩展
+}>;
 ```
 
 ### 元素类型系统
 
 ```typescript
-// 元素类型枚举
-export const ELEMENT_TYPES = {
-  RECTANGLE: "rectangle",
-  ELLIPSE: "ellipse",
-  DIAMOND: "diamond",
-  ARROW: "arrow",
-  LINE: "line",
-  FREEDRAW: "freedraw",
-  TEXT: "text",
-  IMAGE: "image",
-  FRAME: "frame",
-  MAGICFRAME: "magicframe",
-  EMBEDDABLE: "embeddable",
-} as const;
+// 实际的元素类型定义（基于源码）
 
-export type ElementType = typeof ELEMENT_TYPES[keyof typeof ELEMENT_TYPES];
-
-// 具体元素类型定义
-export interface ExcalidrawRectangleElement
-  extends ExcalidrawGenericElement {
+// 基础几何元素
+export type ExcalidrawRectangleElement = _ExcalidrawElementBase & {
   type: "rectangle";
-}
+};
 
-export interface ExcalidrawEllipseElement
-  extends ExcalidrawGenericElement {
+export type ExcalidrawEllipseElement = _ExcalidrawElementBase & {
   type: "ellipse";
-}
+};
 
-export interface ExcalidrawArrowElement
-  extends ExcalidrawGenericElement {
-  type: "arrow";
-  points: readonly Point[];
-  lastCommittedPoint: Point | null;
+export type ExcalidrawDiamondElement = _ExcalidrawElementBase & {
+  type: "diamond";
+};
+
+// 文本元素
+export type ExcalidrawTextElement = _ExcalidrawElementBase & {
+  type: "text";
+  fontSize: number;
+  fontFamily: FontFamilyValues;
+  text: string;
+  textAlign: TextAlign;
+  verticalAlign: VerticalAlign;
+  containerId: ExcalidrawBindableElement["id"] | null;
+  originalText: string;
+  autoResize: boolean;
+  lineHeight: LineHeight;
+};
+
+// 线性元素基类
+export type ExcalidrawLinearElement = _ExcalidrawElementBase & {
+  type: "arrow" | "line";
+  points: readonly LocalPoint[];
+  lastCommittedPoint: LocalPoint | null;
   startBinding: PointBinding | null;
   endBinding: PointBinding | null;
   startArrowhead: Arrowhead | null;
   endArrowhead: Arrowhead | null;
-}
+};
 
-export interface ExcalidrawTextElement
-  extends ExcalidrawGenericElement {
-  type: "text";
-  fontSize: number;
-  fontFamily: FontFamily;
-  text: string;
-  baseline: number;
-  textAlign: TextAlign;
-  verticalAlign: VerticalAlign;
-  containerId: string | null;
-  originalText: string;
-  autoResize: boolean;
-  lineHeight: LineHeight;
-}
+// 箭头元素
+export type ExcalidrawArrowElement = ExcalidrawLinearElement & {
+  type: "arrow";
+};
 
-// 联合类型
-export type ExcalidrawElement =
+// 线条元素
+export type ExcalidrawLineElement = ExcalidrawLinearElement & {
+  type: "line";
+};
+
+// 自由绘制元素
+export type ExcalidrawFreeDrawElement = _ExcalidrawElementBase & {
+  type: "freedraw";
+  points: readonly LocalPoint[];
+  pressures: readonly number[];
+  simulatePressure: boolean;
+};
+
+// 图像元素
+export type ExcalidrawImageElement = _ExcalidrawElementBase & {
+  type: "image";
+  fileId: FileId | null;
+  status: "pending" | "saved" | "error";
+  crop?: ImageCrop;
+};
+
+// 框架元素
+export type ExcalidrawFrameElement = _ExcalidrawElementBase & {
+  type: "frame";
+  name: string | null;
+};
+
+// 魔法框架元素（AI生成）
+export type ExcalidrawMagicFrameElement = _ExcalidrawElementBase & {
+  type: "magicframe";
+  name: string | null;
+};
+
+// 嵌入式元素
+export type ExcalidrawEmbeddableElement = _ExcalidrawElementBase & {
+  type: "embeddable";
+};
+
+// iframe 元素
+export type ExcalidrawIframeElement = _ExcalidrawElementBase & {
+  type: "iframe";
+  customData?: { generationData?: MagicGenerationData };
+};
+
+// 通用几何元素（矩形、椭圆、菱形的联合）
+export type ExcalidrawGenericElement =
   | ExcalidrawRectangleElement
   | ExcalidrawEllipseElement
-  | ExcalidrawArrowElement
-  | ExcalidrawLineElement
+  | ExcalidrawDiamondElement;
+
+// 主要联合类型（实际源码定义）
+export type ExcalidrawElement =
+  | ExcalidrawGenericElement
   | ExcalidrawTextElement
+  | ExcalidrawLinearElement
+  | ExcalidrawArrowElement
+  | ExcalidrawFreeDrawElement
   | ExcalidrawImageElement
   | ExcalidrawFrameElement
   | ExcalidrawMagicFrameElement
-  | ExcalidrawEmbeddableElement
-  | ExcalidrawFreeDrawElement;
+  | ExcalidrawIframeElement
+  | ExcalidrawEmbeddableElement;
 ```
 
 ### 样式相关类型
@@ -203,75 +245,132 @@ export type RoundnessType = "legacy" | "proportional-radius" | "adaptive-radius"
 ### 核心应用状态
 
 ```typescript
-// packages/excalidraw/types.ts
+// packages/excalidraw/types.ts - 实际源码中的 AppState
 export interface AppState {
-  // 视口状态
-  zoom: Zoom;
-  scrollX: number;
-  scrollY: number;
-  width: number;
-  height: number;
+  // UI 控制状态
+  contextMenu: {
+    items: ContextMenuItems;
+    top: number;
+    left: number;
+  } | null;
+  showWelcomeScreen: boolean;
+  isLoading: boolean;
+  errorMessage: React.ReactNode;
 
-  // 编辑状态
-  editingElement: ExcalidrawElement | null;
-  editingLinearElement: LinearElementEditor | null;
-  editingGroupId: string | null;
-  selectedElementIds: Record<string, true>;
-  selectedGroupIds: Record<string, true>;
+  // 活动元素状态
+  activeEmbeddable: {
+    element: NonDeletedExcalidrawElement;
+    state: "hover" | "active";
+  } | null;
 
-  // 工具状态
+  // 元素创建和编辑状态
+  newElement: NonDeleted<ExcalidrawNonSelectionElement> | null;
+  resizingElement: NonDeletedExcalidrawElement | null;
+  multiElement: NonDeleted<ExcalidrawLinearElement> | null;
+  selectionElement: NonDeletedExcalidrawElement | null;
+  editingTextElement: NonDeletedExcalidrawElement | null;
+
+  // 工具状态（复杂结构）
   activeTool: {
-    type: ToolType;
-    locked?: boolean;
-    lastActiveTool?: ToolType;
-    customType?: string;
-  };
+    lastActiveTool: ActiveTool | null;    // 上一个工具
+    locked: boolean;                      // 工具锁定
+    fromSelection: boolean;               // 从选择工具切换
+  } & ActiveTool;
+
+  // 笔输入支持
   penMode: boolean;
   penDetected: boolean;
 
-  // 绘制状态
-  currentItemStrokeColor: string;
-  currentItemBackgroundColor: string;
-  currentItemFillStyle: FillStyle;
-  currentItemStrokeWidth: number;
-  currentItemStrokeStyle: StrokeStyle;
-  currentItemRoughness: number;
-  currentItemOpacity: number;
-  currentItemFontFamily: FontFamily;
-  currentItemFontSize: number;
-  currentItemTextAlign: TextAlign;
-  currentItemStartArrowhead: Arrowhead;
-  currentItemEndArrowhead: Arrowhead;
-  currentItemRoundness: string;
-
-  // UI 状态
-  viewModeEnabled: boolean;
-  zenModeEnabled: boolean;
-  gridSize: number | null;
-  theme: Theme;
-  name: string;
-  isLoading: boolean;
-  errorMessage: string | null;
-
-  // 交互状态
-  draggingElement: ExcalidrawElement | null;
-  resizingElement: ExcalidrawElement | null;
-  multiElement: ExcalidrawElement | null;
-  selectionElement: ExcalidrawElement | null;
+  // 绑定和交互
   isBindingEnabled: boolean;
-  startBoundElement: ExcalidrawElement | null;
+  startBoundElement: NonDeleted<ExcalidrawBindableElement> | null;
   suggestedBindings: SuggestedBinding[];
-  frameToHighlight: ExcalidrawElement | null;
+  frameToHighlight: NonDeleted<ExcalidrawFrameLikeElement> | null;
+
+  // 帧渲染配置
   frameRendering: {
     enabled: boolean;
     name: boolean;
     outline: boolean;
     clip: boolean;
   };
+  editingFrame: string | null;
 
-  // 协作状态
-  collaborators: Map<string, Collaborator>;
-  showStats: boolean;
+  // 选择状态
+  selectedElementIds: Readonly<{ [id: string]: true }>;
+  hoveredElementIds: Readonly<{ [id: string]: true }>;
+  previousSelectedElementIds: { [id: string]: true };
+  selectedGroupIds: { [groupId: string]: boolean };
+  editingGroupId: GroupId | null;
+  selectedElementsAreBeingDragged: boolean;
+
+  // 视口和变换
+  zoom: Zoom;
+  scrollX: number;
+  scrollY: number;
+  width: number;
+  height: number;
+  offsetTop: number;
+  offsetLeft: number;
+
+  // 当前绘制属性
+  currentItemStrokeColor: string;
+  currentItemBackgroundColor: string;
+  currentItemFillStyle: ExcalidrawElement["fillStyle"];
+  currentItemStrokeWidth: number;
+  currentItemStrokeStyle: ExcalidrawElement["strokeStyle"];
+  currentItemRoughness: number;
+  currentItemOpacity: number;
+  currentItemFontFamily: FontFamilyValues;
+  currentItemFontSize: number;
+  currentItemTextAlign: TextAlign;
+  currentItemStartArrowhead: Arrowhead | null;
+  currentItemEndArrowhead: Arrowhead | null;
+  currentItemRoundness: StrokeRoundness;
+  currentItemArrowType: "sharp" | "round" | "elbow";
+
+  // 导出配置
+  exportBackground: boolean;
+  exportEmbedScene: boolean;
+  exportWithDarkMode: boolean;
+  exportScale: number;
+
+  // 视图和主题
+  viewBackgroundColor: string;
+  theme: Theme;
+  zenModeEnabled: boolean;
+  viewModeEnabled: boolean;
+  gridModeEnabled: boolean;
+  gridSize: number;
+  gridStep: number;
+
+  // UI 弹窗和菜单
+  openMenu: "canvas" | "shape" | null;
+  openPopup: "canvasBackground" | "elementBackground" | "elementStroke"
+             | "fontFamily" | "compactTextProperties" | "compactStrokeStyles"
+             | "compactOtherProperties" | "compactArrowProperties" | null;
+  openSidebar: { name: SidebarName; tab?: SidebarTabName } | null;
+  openDialog: null
+    | { name: "imageExport" | "help" | "jsonExport" }
+    | { name: "ttd"; tab: "text-to-diagram" | "mermaid" }
+    | { name: "commandPalette" }
+    | { name: "elementLinkSelector"; sourceElementId: ExcalidrawElement["id"] };
+
+  // 交互状态
+  cursorButton: "up" | "down";
+  lastPointerDownWith: PointerType;
+  isRotating: boolean;
+  isResizing: boolean;
+  name: string | null;
+
+  // 协作
+  collaborators: Map<SocketId, Collaborator>;
+
+  // 其他功能
+  toast: { message: string; closable?: boolean; duration?: number } | null;
+  elementsToHighlight: NonDeleted<ExcalidrawElement>[] | null;
+  shouldCacheIgnoreZoom: boolean;
+  scrolledOutside: boolean;
 }
 ```
 

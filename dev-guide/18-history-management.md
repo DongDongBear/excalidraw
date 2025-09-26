@@ -6,77 +6,138 @@
 
 ## 历史管理架构设计
 
-### 分层存储策略
+### 简洁的栈式结构
 
 ```
-历史存储层次
-├── 内存层 (Memory Layer)
-│   ├── 热数据缓存      # 最近的20个快照
-│   ├── 快照索引       # 快速访问索引
-│   └── 状态diff       # 增量差异数据
-├── 本地存储层 (Local Storage)
-│   ├── IndexedDB      # 历史快照持久化
-│   ├── 压缩存储       # LZ4压缩算法
-│   └── 自动清理       # 过期数据清理
-└── 云端同步层 (Cloud Sync)
-    ├── 关键节点同步    # 重要快照云端备份
-    ├── 冲突解决       # 多设备历史冲突
-    └── 版本分支       # 历史分支管理
+历史管理架构 (实际源码实现)
+├── History 类
+│   ├── undoStack[]     # 撤销栈 (HistoryDelta[])
+│   ├── redoStack[]     # 重做栈 (HistoryDelta[])
+│   └── store: Store    # 数据存储引用
+├── HistoryDelta 类
+│   ├── elements       # 元素变更差异
+│   ├── appState       # 应用状态差异
+│   └── applyTo()      # 应用差异到当前状态
+└── 事件系统
+    ├── onHistoryChangedEmitter  # 历史变更事件
+    └── HistoryChangedEvent      # 历史变更事件数据
 ```
 
 ### 核心数据结构
 
 ```typescript
-// 历史快照接口
-export interface HistorySnapshot {
-  id: string;
-  timestamp: number;
-  elements: readonly ExcalidrawElement[];
-  appState: AppState;
-  files?: BinaryFiles;
+// packages/excalidraw/history.ts - 实际源码结构
 
-  // 元数据
-  metadata: {
-    actionName?: ActionName;
-    userInitiated: boolean;
-    autoSave: boolean;
-    description?: string;
-    tags?: string[];
-  };
+// 历史管理主类
+export class History {
+  public readonly onHistoryChangedEmitter = new Emitter<[HistoryChangedEvent]>();
 
-  // 优化字段
-  optimizations?: {
-    compressed: boolean;
-    deltaFrom?: string;  // 基于哪个快照的增量
-    size: number;        // 原始大小
-    compressedSize?: number;
-  };
+  // 简单的栈式存储
+  public readonly undoStack: HistoryDelta[] = [];
+  public readonly redoStack: HistoryDelta[] = [];
+
+  public get isUndoStackEmpty() {
+    return this.undoStack.length === 0;
+  }
+
+  public get isRedoStackEmpty() {
+    return this.redoStack.length === 0;
+  }
+
+  constructor(private readonly store: Store) {}
+
+  // 记录变更到历史栈
+  public record(delta: StoreDelta) {
+    if (delta.isEmpty() || delta instanceof HistoryDelta) {
+      return;
+    }
+
+    // 构造历史记录（逆操作）
+    const historyDelta = HistoryDelta.inverse(delta);
+    this.undoStack.push(historyDelta);
+
+    // 重要：只在元素变更时清空重做栈
+    if (!historyDelta.elements.isEmpty()) {
+      this.redoStack.length = 0;
+    }
+
+    this.onHistoryChangedEmitter.trigger(
+      new HistoryChangedEvent(this.isUndoStackEmpty, this.isRedoStackEmpty),
+    );
+  }
+
+  // 撤销操作
+  public undo(elements: SceneElementsMap, appState: AppState) {
+    return this.perform(
+      elements,
+      appState,
+      () => History.pop(this.undoStack),      // 从撤销栈取出
+      (entry) => History.push(this.redoStack, entry), // 推入重做栈
+    );
+  }
+
+  // 重做操作
+  public redo(elements: SceneElementsMap, appState: AppState) {
+    return this.perform(
+      elements,
+      appState,
+      () => History.pop(this.redoStack),      // 从重做栈取出
+      (entry) => History.push(this.undoStack, entry), // 推入撤销栈
+    );
+  }
 }
 
-// 增量差异
-export interface HistoryDelta {
-  baseSnapshotId: string;
-  operations: DeltaOperation[];
-  timestamp: number;
+// 历史差异类（继承自 StoreDelta）
+export class HistoryDelta extends StoreDelta {
+  /**
+   * 将差异应用到当前状态
+   * @param elements 当前元素
+   * @param appState 当前应用状态
+   * @param snapshot 快照（用于回退）
+   * @returns [新元素状态, 新应用状态, 是否有可见变更]
+   */
+  public applyTo(
+    elements: SceneElementsMap,
+    appState: AppState,
+    snapshot: StoreSnapshot,
+  ): [SceneElementsMap, AppState, boolean] {
+    // 应用元素变更（排除版本控制字段）
+    const [nextElements, elementsContainVisibleChange] = this.elements.applyTo(
+      elements,
+      snapshot.elements, // 回退数据源
+      {
+        excludedProperties: new Set(["version", "versionNonce"]), // 协作兼容
+      },
+    );
+
+    // 应用应用状态变更
+    const [nextAppState, appStateContainsVisibleChange] = this.appState.applyTo(
+      appState,
+      nextElements,
+    );
+
+    const appliedVisibleChanges =
+      elementsContainVisibleChange || appStateContainsVisibleChange;
+
+    return [nextElements, nextAppState, appliedVisibleChanges];
+  }
+
+  // 静态工具方法
+  public static override calculate(prevSnapshot: StoreSnapshot, nextSnapshot: StoreSnapshot) {
+    return super.calculate(prevSnapshot, nextSnapshot) as HistoryDelta;
+  }
+
+  public static override inverse(delta: StoreDelta): HistoryDelta {
+    return super.inverse(delta) as HistoryDelta;
+  }
 }
 
-export interface DeltaOperation {
-  type: 'add' | 'remove' | 'modify' | 'move';
-  elementId?: string;
-  data?: Partial<ExcalidrawElement>;
-  path?: string;        // 状态路径，如 'appState.zoom'
-  oldValue?: any;
-  newValue?: any;
-}
-
-// 历史统计信息
-export interface HistoryStats {
-  totalSnapshots: number;
-  memoryUsage: number;      // 字节
-  storageUsage: number;     // 字节
-  compressionRatio: number; // 压缩比
-  oldestSnapshot: number;   // 时间戳
-  averageSnapshotSize: number;
+// 历史变更事件
+export class HistoryChangedEvent {
+  constructor(
+    public readonly isUndoStackEmpty: boolean = true,
+    public readonly isRedoStackEmpty: boolean = true,
+  ) {}
 }
 ```
 
