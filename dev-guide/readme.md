@@ -99,11 +99,11 @@ graph LR
 掌握 Excalidraw 的高性能渲染机制和优化策略。
 
 #### 核心内容
-| 文档 | 主要内容 | 性能指标 |
-|------|----------|----------|
-| `09-rendering-engine.md` | 渲染管线、场景图、视口管理 | 60fps@1000元素 |
-| `10-shape-rendering.md` | RoughJS、手绘算法、图形缓存 | 首次渲染<16ms |
-| `11-render-optimization.md` | 分层、虚拟化、批处理 | 重绘<8ms |
+| 文档 | 主要内容 | 性能指标 | 状态 |
+|------|----------|----------|------|
+| `11-rendering-engine.md` | 渲染管线、场景图、视口管理 | 60fps@1000元素 | ✅ 完成 |
+| `12-shape-rendering.md` | RoughJS、手绘算法、图形缓存 | 首次渲染<16ms | ✅ 完成 |
+| `13-render-optimization.md` | 分层、虚拟化、批处理 | 重绘<8ms | ✅ 完成 |
 
 #### 渲染流程
 ```javascript
@@ -128,11 +128,11 @@ function render(scene, viewport) {
 理解复杂交互的实现原理，掌握工具系统设计模式。
 
 #### 核心内容
-| 文档 | 主要内容 | 交互类型 |
-|------|----------|----------|
-| `12-tool-system.md` | 工具抽象、状态机、快捷键 | 选择/绘制/编辑 |
-| `13-gesture-handling.md` | 事件处理、手势识别、多点触控 | 拖拽/缩放/旋转 |
-| `14-selection-transform.md` | 选择算法、变换手柄、约束系统 | 单选/多选/框选 |
+| 文档 | 主要内容 | 交互类型 | 状态 |
+|------|----------|----------|------|
+| `14-tool-system.md` | 工具抽象、状态机、快捷键 | 选择/绘制/编辑 | ✅ 完成 |
+| `15-gesture-handling.md` | 事件处理、手势识别、多点触控 | 拖拽/缩放/旋转 | ✅ 完成 |
+| `16-selection-transform.md` | 选择算法、变换手柄、约束系统 | 单选/多选/框选 | ✅ 完成 |
 
 #### 工具系统架构
 ```typescript
@@ -162,10 +162,10 @@ class DrawingTool implements Tool {
 掌握 Excalidraw 的命令模式实现和历史管理机制。
 
 #### 核心内容
-| 文档 | 主要内容 | 设计模式 |
-|------|----------|----------|
-| `15-action-system.md` | Action 架构、注册机制、批处理 | 命令模式 |
-| `16-undo-redo.md` | 历史栈、状态快照、内存优化 | 备忘录模式 |
+| 文档 | 主要内容 | 设计模式 | 状态 |
+|------|----------|----------|------|
+| `17-action-system.md` | Action 架构、注册机制、批处理 | 命令模式 | ✅ 完成 |
+| `18-history-management.md` | 历史栈、状态快照、内存优化 | 备忘录模式 | ✅ 完成 |
 
 #### Action 示例
 ```typescript
@@ -188,11 +188,11 @@ const deleteSelectedElements: Action = {
 了解 Excalidraw 的扩展功能实现，包括协作、导出等。
 
 #### 核心内容
-| 文档 | 主要内容 | 技术栈 |
-|------|----------|---------|
-| `17-collaboration.md` | 实时协作、CRDT、冲突解决 | WebSocket/WebRTC |
-| `18-import-export.md` | 数据格式、SVG/PNG 导出 | Canvas API |
-| `19-plugin-system.md` | 插件接口、生命周期、主题 | 策略模式 |
+| 文档 | 主要内容 | 技术栈 | 状态 |
+|------|----------|---------|------|
+| `19-collaboration-system.md` | 实时协作、CRDT、冲突解决 | WebSocket/WebRTC | ✅ 完成 |
+| `21-import-export.md` | 数据格式、SVG/PNG 导出 | Canvas API | ✅ 完成 |
+| `20-plugin-architecture.md` | 插件接口、生命周期、主题 | 策略模式 | ✅ 完成 |
 
 ### 第七章：最小核心拆解
 
@@ -200,11 +200,11 @@ const deleteSelectedElements: Action = {
 提取 Excalidraw 的核心功能，打造轻量级画板库。
 
 #### 核心内容
-| 文档 | 主要内容 | 目标指标 |
-|------|----------|----------|
-| `20-minimal-core-analysis.md` | 功能裁剪、依赖分析 | <50KB |
-| `21-minimal-core-implementation.md` | 核心实现、接口设计 | 零依赖 |
-| `22-integration-examples.md` | 框架集成、使用示例 | 全框架 |
+| 文档 | 主要内容 | 目标指标 | 状态 |
+|------|----------|----------|------|
+| `22-minimal-core.md` | 功能裁剪、依赖分析、核心实现 | <50KB | ✅ 完成 |
+| `23-performance-core.md` | 性能优化、内存管理、缓存策略 | 零依赖 | ✅ 完成 |
+| `24-extensibility-core.md` | 插件化架构、扩展设计、主题系统 | 全框架 | ✅ 完成 |
 
 #### 最小核心功能集
 ```javascript
@@ -238,11 +238,11 @@ class MinimalBoard {
 总结最佳实践，建立自己的画板开发知识体系。
 
 #### 核心内容
-| 文档 | 主要内容 | 实用价值 |
-|------|----------|----------|
-| `23-engineering-practices.md` | 工程化、测试、CI/CD | 生产级别 |
-| `24-performance-guide.md` | 性能监控、优化策略 | 性能保障 |
-| `25-summary.md` | 知识总结、进阶方向 | 持续成长 |
+| 文档 | 主要内容 | 实用价值 | 状态 |
+|------|----------|----------|------|
+| `25-development-workflow.md` | 工程化、测试、CI/CD | 生产级别 | ✅ 完成 |
+| `26-debugging-optimization.md` | 性能监控、调试技巧、优化策略 | 性能保障 | ✅ 完成 |
+| `27-ecosystem-integration.md` | 生态集成、框架适配、云服务 | 持续成长 | ✅ 完成 |
 
 ## 🎯 最小核心功能规划
 
