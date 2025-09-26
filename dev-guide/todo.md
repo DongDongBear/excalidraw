@@ -3,71 +3,87 @@
 ## 第一章：Canvas 基础入门
 
 ### 1.1 Canvas 基础概念与 API
-- [ ] 创建 `01-canvas-basics.md`
-  - [ ] Canvas 是什么？与 SVG、DOM 的区别
-  - [ ] Canvas 2D 上下文详解
-  - [ ] 坐标系统与像素操作原理
-  - [ ] 设备像素比（devicePixelRatio）处理
-  - [ ] 编写示例：创建一个基础画布
+- [x] 创建 `01-canvas-basics.md`
+  - [x] Canvas 是什么？与 SVG、DOM 的区别
+  - [x] Canvas 2D 上下文详解
+  - [x] 坐标系统与像素操作原理
+  - [x] 设备像素比（devicePixelRatio）处理
+  - [x] 编写示例：创建一个基础画布
 
 ### 1.2 Canvas 图形绘制
-- [ ] 创建 `02-canvas-drawing.md`
-  - [ ] 路径（Path）概念与 API
-  - [ ] 基本图形绘制（矩形、圆形、多边形）
-  - [ ] 贝塞尔曲线与复杂路径
-  - [ ] 样式设置（颜色、渐变、图案、阴影）
-  - [ ] 编写示例：实现简单绘图工具
+- [x] 创建 `02-canvas-drawing.md`
+  - [x] 路径（Path）概念与 API
+  - [x] 基本图形绘制（矩形、圆形、多边形）
+  - [x] 贝塞尔曲线与复杂路径
+  - [x] 样式设置（颜色、渐变、图案、阴影）
+  - [x] 编写示例：实现简单绘图工具
 
 ### 1.3 Canvas 变换与合成
-- [ ] 创建 `03-canvas-transform.md`
-  - [ ] 变换矩阵原理
-  - [ ] translate、rotate、scale 详解
-  - [ ] save() 和 restore() 状态管理
-  - [ ] 图像合成（globalCompositeOperation）
-  - [ ] 编写示例：实现图形变换工具
+- [x] 创建 `03-canvas-transform.md`
+  - [x] 变换矩阵原理
+  - [x] translate、rotate、scale 详解
+  - [x] save() 和 restore() 状态管理
+  - [x] 图像合成（globalCompositeOperation）
+  - [x] 编写示例：实现图形变换工具
 
 ### 1.4 Canvas 事件与交互
-- [ ] 创建 `04-canvas-interaction.md`
-  - [ ] 事件坐标转换（client → canvas）
-  - [ ] 碰撞检测算法（点、线、面）
-  - [ ] 拖拽实现原理
-  - [ ] 手势识别基础
-  - [ ] 编写示例：可交互的图形编辑器
+- [x] 创建 `04-canvas-interaction.md`
+  - [x] 事件坐标转换（client → canvas）
+  - [x] 碰撞检测算法（点、线、面）
+  - [x] 拖拽实现原理
+  - [x] 手势识别基础
+  - [x] 编写示例：可交互的图形编辑器
 
 ### 1.5 Canvas 性能优化
-- [ ] 创建 `05-canvas-optimization.md`
-  - [ ] 重绘与重排的区别
-  - [ ] 脏矩形算法
-  - [ ] 离屏 Canvas 技术
-  - [ ] requestAnimationFrame 最佳实践
-  - [ ] 分层渲染策略
-  - [ ] 编写示例：优化后的绘图应用
+- [x] 创建 `05-canvas-optimization.md`
+  - [x] 重绘与重排的区别
+  - [x] 脏矩形算法
+  - [x] 离屏 Canvas 技术
+  - [x] requestAnimationFrame 最佳实践
+  - [x] 分层渲染策略
+  - [x] 编写示例：优化后的绘图应用
 
 ## 第二章：Excalidraw 项目架构
 
 ### 2.1 项目结构解析
-- [ ] 创建 `06-excalidraw-structure.md`
-  - [ ] Monorepo 架构详解
-  - [ ] 包依赖关系分析
-  - [ ] 构建系统（esbuild + Vite）
-  - [ ] TypeScript 配置策略
-  - [ ] 开发环境搭建指南
+- [x] 创建 `06-excalidraw-structure.md`
+  - [x] Monorepo 架构详解
+  - [x] 包依赖关系分析
+  - [x] 构建系统（esbuild + Vite）
+  - [x] TypeScript 配置策略
+  - [x] 开发环境搭建指南
 
-### 2.2 核心数据模型
-- [ ] 创建 `07-data-model.md`
-  - [ ] ExcalidrawElement 类型系统
-  - [ ] AppState 状态设计
-  - [ ] Scene 数据结构
-  - [ ] 历史记录（History）管理
-  - [ ] 数据归一化（Normalization）
+### 2.2 核心模块依赖分析
+- [x] 创建 `07-core-dependencies.md`
+  - [x] 依赖层级分析
+  - [x] 最小核心识别
+  - [x] Bundle 大小分析
+  - [x] Tree Shaking 优化
+  - [x] 模块替换策略
 
-### 2.3 组件架构设计
-- [ ] 创建 `08-component-architecture.md`
-  - [ ] App.tsx 主组件分析
-  - [ ] 组件通信机制
-  - [ ] Context 与状态管理
-  - [ ] 自定义 Hook 设计模式
-  - [ ] 性能优化（React.memo、useMemo）
+### 2.3 数据结构与类型定义
+- [x] 创建 `08-data-structures.md`
+  - [x] ExcalidrawElement 类型系统
+  - [x] AppState 状态设计
+  - [x] 序列化和反序列化
+  - [x] 性能优化数据结构
+  - [x] 最小化核心数据结构
+
+### 2.4 元素系统架构
+- [x] 创建 `09-element-system.md`
+  - [x] 元素创建系统
+  - [x] 元素操作系统
+  - [x] 元素几何系统
+  - [x] 碰撞检测系统
+  - [x] 最小化元素系统
+
+### 2.5 状态管理模式
+- [x] 创建 `10-state-management.md`
+  - [x] React 状态管理模式
+  - [x] 历史管理系统
+  - [x] Action 系统
+  - [x] 状态订阅和响应式更新
+  - [x] 最小化状态管理系统
 
 ## 第三章：渲染系统深度解析
 
@@ -244,13 +260,13 @@
 
 ## 进度跟踪
 
-### 当前章节：第一章
-### 当前任务：Canvas 基础概念与 API
+### 当前章节：第三章
+### 当前任务：渲染系统深度解析
 ### 完成情况：
 - [x] 制定学习计划
 - [x] 创建项目结构
-- [ ] 第一章：Canvas 基础入门（0/5）
-- [ ] 第二章：Excalidraw 项目架构（0/3）
+- [x] 第一章：Canvas 基础入门（5/5）
+- [x] 第二章：Excalidraw 项目架构（5/5）
 - [ ] 第三章：渲染系统深度解析（0/3）
 - [ ] 第四章：交互系统实现（0/3）
 - [ ] 第五章：Action 与命令系统（0/2）
