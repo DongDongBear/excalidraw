@@ -73,42 +73,55 @@ export interface Zoom {
 ```typescript
 // packages/element/src/types.ts - 实际源码定义
 type _ExcalidrawElementBase = Readonly<{
-  id: string;              // 唯一标识符
-  x: number;               // X 坐标
-  y: number;               // Y 坐标
+  id: string;              // 唯一标识符（使用 nanoid 生成）
+  x: number;               // X 坐标（场景坐标系）
+  y: number;               // Y 坐标（场景坐标系）
   width: number;           // 宽度
   height: number;          // 高度
-  angle: Radians;          // 旋转角度（弧度类型）
-  strokeColor: string;     // 边框颜色
+  angle: Radians;          // 旋转角度（弧度类型，品牌类型确保类型安全）
+  strokeColor: string;     // 边框颜色（十六进制或颜色名）
   backgroundColor: string; // 填充颜色
-  fillStyle: FillStyle;    // 填充样式
-  strokeWidth: number;     // 边框宽度
-  strokeStyle: StrokeStyle; // 边框样式
-  roughness: number;       // 手绘粗糙度
-  opacity: number;         // 透明度
-  seed: number;            // 随机种子（用于 roughjs 形状生成）
-  version: number;         // 版本号（用于协作）
-  versionNonce: number;    // 版本随机数（用于确定性协调）
-  isDeleted: boolean;      // 删除标记
-  link: string | null;     // 链接地址
-  locked: boolean;         // 锁定状态
-  groupIds: readonly GroupId[]; // 所属组ID（从深到浅排序）
-  frameId: string | null;  // 所属框架ID
-  index: FractionalIndex | null;  // 分数索引（用于多人排序，可能为null）
+  fillStyle: FillStyle;    // 填充样式："hachure" | "cross-hatch" | "solid" | "zigzag"
+  strokeWidth: number;     // 边框宽度（像素）
+  strokeStyle: StrokeStyle; // 边框样式："solid" | "dashed" | "dotted"
+  roughness: number;       // 手绘粗糙度（0-2，用于 roughjs）
+  opacity: number;         // 透明度（0-100）
+  seed: number;            // 随机种子（用于 roughjs 确定性渲染）
+  version: number;         // 版本号（递增，用于协作冲突解决）
+  versionNonce: number;    // 版本随机数（用于确定性协调，即使 version 相同）
+  isDeleted: boolean;      // 删除标记（软删除，用于协作）
+  link: string | null;     // 链接地址（可点击跳转）
+  locked: boolean;         // 锁定状态（防止编辑）
+  groupIds: readonly GroupId[]; // 所属组ID数组（从深到浅排序）
+  frameId: string | null;  // 所属框架ID（frame 或 magicframe）
+  /**
+   * ⚠️ 关键字段：分数索引（fractional-indexing）
+   * 用于多人协作时的元素排序，避免索引冲突
+   * 格式如 "a0", "a1", "a0V" 等，可以在任意两个索引间插入新值
+   * 可能为 null（新创建的元素尚未分配索引）
+   * 依赖库: fractional-indexing@3.2.0
+   */
+  index: FractionalIndex | null;
   roundness: {             // 圆角设置
-    type: RoundnessType;
-    value?: number;
+    type: RoundnessType;   // "legacy" | "proportional-radius" | "adaptive-radius"
+    value?: number;        // 圆角半径值（可选）
   } | null;
-  boundElements: readonly BoundElement[] | null; // 绑定的元素
-  updated: number;         // 最后更新时间戳（ms）
-  customData?: Record<string, any>; // 自定义数据扩展
+  boundElements: readonly BoundElement[] | null; // 绑定的元素（箭头、文本等）
+  updated: number;         // 最后更新时间戳（epoch ms）
+  customData?: Record<string, any>; // 自定义数据扩展（可选字段）
 }>;
 ```
 
 ### 元素类型系统
 
 ```typescript
-// 实际的元素类型定义（基于源码）
+// ============ 实际的元素类型定义 ============
+// 源文件: packages/element/src/types.ts (2025年1月，最新源码验证)
+
+// 选择框元素（用于多选操作）
+export type ExcalidrawSelectionElement = _ExcalidrawElementBase & {
+  type: "selection";
+};
 
 // 基础几何元素
 export type ExcalidrawRectangleElement = _ExcalidrawElementBase & {
@@ -123,7 +136,14 @@ export type ExcalidrawDiamondElement = _ExcalidrawElementBase & {
   type: "diamond";
 };
 
-// 文本元素
+// 通用几何元素联合类型（这些元素没有额外属性）
+export type ExcalidrawGenericElement =
+  | ExcalidrawSelectionElement
+  | ExcalidrawRectangleElement
+  | ExcalidrawDiamondElement
+  | ExcalidrawEllipseElement;
+
+// 文本元素（完整字段定义）
 export type ExcalidrawTextElement = _ExcalidrawElementBase & {
   type: "text";
   fontSize: number;
@@ -131,15 +151,24 @@ export type ExcalidrawTextElement = _ExcalidrawElementBase & {
   text: string;
   textAlign: TextAlign;
   verticalAlign: VerticalAlign;
-  containerId: ExcalidrawBindableElement["id"] | null;
+  containerId: ExcalidrawGenericElement["id"] | null;  // 注意：只能包含在通用几何元素中
   originalText: string;
+  /**
+   * If `true` the width will fit the text. If `false`, the text will
+   * wrap to fit the width.
+   * @default true
+   */
   autoResize: boolean;
-  lineHeight: LineHeight;
+  /**
+   * Unitless line height (aligned to W3C). To get line height in px, multiply
+   * with font size (using `getLineHeightInPx` helper).
+   */
+  lineHeight: number & { _brand: "unitlessLineHeight" };
 };
 
-// 线性元素基类
+// 线性元素基类（arrow 和 line 的共同父类型）
 export type ExcalidrawLinearElement = _ExcalidrawElementBase & {
-  type: "arrow" | "line";
+  type: "line" | "arrow";
   points: readonly LocalPoint[];
   lastCommittedPoint: LocalPoint | null;
   startBinding: PointBinding | null;
@@ -148,14 +177,16 @@ export type ExcalidrawLinearElement = _ExcalidrawElementBase & {
   endArrowhead: Arrowhead | null;
 };
 
-// 箭头元素
-export type ExcalidrawArrowElement = ExcalidrawLinearElement & {
-  type: "arrow";
-};
-
-// 线条元素
+// ⚠️ 关键字段：线条元素包含 polygon 字段
 export type ExcalidrawLineElement = ExcalidrawLinearElement & {
   type: "line";
+  polygon: boolean;  // 是否是多边形（闭合路径），注意这是非可选字段！
+};
+
+// ⚠️ 关键字段：箭头元素包含 elbowed 字段
+export type ExcalidrawArrowElement = ExcalidrawLinearElement & {
+  type: "arrow";
+  elbowed: boolean;  // 是否是肘形箭头（直角转折，类似流程图连接线），注意这是非可选字段！
 };
 
 // 自由绘制元素
@@ -164,14 +195,29 @@ export type ExcalidrawFreeDrawElement = _ExcalidrawElementBase & {
   points: readonly LocalPoint[];
   pressures: readonly number[];
   simulatePressure: boolean;
+  lastCommittedPoint: LocalPoint | null;
 };
 
-// 图像元素
+// 图像裁剪信息类型
+export type ImageCrop = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  naturalWidth: number;
+  naturalHeight: number;
+};
+
+// ⚠️ 关键字段：图像元素包含 scale 和 crop 字段
 export type ExcalidrawImageElement = _ExcalidrawElementBase & {
   type: "image";
   fileId: FileId | null;
+  /** whether respective file is persisted */
   status: "pending" | "saved" | "error";
-  crop?: ImageCrop;
+  /** X and Y scale factors <-1, 1>, used for image axis flipping */
+  scale: [number, number];  // X 和 Y 缩放因子，用于图像翻转
+  /** whether an element is cropped */
+  crop: ImageCrop | null;   // 裁剪信息，可以为 null
 };
 
 // 框架元素
@@ -186,10 +232,21 @@ export type ExcalidrawMagicFrameElement = _ExcalidrawElementBase & {
   name: string | null;
 };
 
+// 框架类元素联合类型
+export type ExcalidrawFrameLikeElement =
+  | ExcalidrawFrameElement
+  | ExcalidrawMagicFrameElement;
+
 // 嵌入式元素
 export type ExcalidrawEmbeddableElement = _ExcalidrawElementBase & {
   type: "embeddable";
 };
+
+// AI 生成数据类型
+export type MagicGenerationData =
+  | { status: "pending" }
+  | { status: "done"; html: string }
+  | { status: "error"; message?: string; code: string };
 
 // iframe 元素
 export type ExcalidrawIframeElement = _ExcalidrawElementBase & {
@@ -197,24 +254,36 @@ export type ExcalidrawIframeElement = _ExcalidrawElementBase & {
   customData?: { generationData?: MagicGenerationData };
 };
 
-// 通用几何元素（矩形、椭圆、菱形的联合）
-export type ExcalidrawGenericElement =
-  | ExcalidrawRectangleElement
-  | ExcalidrawEllipseElement
-  | ExcalidrawDiamondElement;
+// iframe 类元素联合类型
+export type ExcalidrawIframeLikeElement =
+  | ExcalidrawIframeElement
+  | ExcalidrawEmbeddableElement;
 
-// 主要联合类型（实际源码定义）
+// ============ 主要联合类型 ============
+/**
+ * ExcalidrawElement should be JSON serializable and (eventually) contain
+ * no computed data. The list of all ExcalidrawElements should be shareable
+ * between peers and contain no state local to the peer.
+ *
+ * 源自: packages/element/src/types.ts:206
+ */
 export type ExcalidrawElement =
   | ExcalidrawGenericElement
   | ExcalidrawTextElement
-  | ExcalidrawLinearElement
-  | ExcalidrawArrowElement
+  | ExcalidrawLinearElement      // 基类，包含 line 和 arrow
+  | ExcalidrawArrowElement       // 具体的 arrow 类型（包含 elbowed 字段）
   | ExcalidrawFreeDrawElement
   | ExcalidrawImageElement
   | ExcalidrawFrameElement
   | ExcalidrawMagicFrameElement
   | ExcalidrawIframeElement
   | ExcalidrawEmbeddableElement;
+
+// 排除选择框元素的类型
+export type ExcalidrawNonSelectionElement = Exclude<
+  ExcalidrawElement,
+  ExcalidrawSelectionElement
+>;
 ```
 
 ### 样式相关类型

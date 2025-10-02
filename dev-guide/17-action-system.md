@@ -72,9 +72,38 @@ export interface Action {
   predicate?: (
     elements: readonly ExcalidrawElement[],
     appState: AppState,
-    props: any,
+    appProps: ExcalidrawProps,
     app: AppClassProperties,
   ) => boolean;
+
+  // 选中状态检查（用于菜单项勾选标记）
+  checked?: (appState: Readonly<AppState>) => boolean;
+
+  // 事件追踪配置
+  trackEvent:
+    | false
+    | {
+        category:
+          | "toolbar"
+          | "element"
+          | "canvas"
+          | "export"
+          | "history"
+          | "menu"
+          | "collab"
+          | "hyperlink"
+          | "search_menu"
+          | "shape_switch";
+        action?: string;
+        predicate?: (
+          appState: Readonly<AppState>,
+          elements: readonly ExcalidrawElement[],
+          value: any,
+        ) => boolean;
+      };
+
+  // 是否允许在视图模式下执行（默认 false）
+  viewMode?: boolean;
 }
 
 // Action执行函数类型
@@ -103,51 +132,155 @@ export type CaptureUpdateActionType =
   | "skipIfEmpty"    // 空变更时跳过
   | "incremental";   // 增量记录
 
+// ActionName 类型定义 - 完整列表(来自 packages/excalidraw/actions/types.ts)
 export type ActionName =
+  // 剪贴板操作
   | "copy"
+  | "cut"
   | "paste"
   | "copyAsPng"
   | "copyAsSvg"
+  | "copyText"
+  | "copyStyles"
+  | "pasteStyles"
+  | "selectAll"
+
+  // 层级管理
   | "sendBackward"
   | "bringForward"
   | "sendToBack"
   | "bringToFront"
-  | "copyStyles"
-  | "pasteStyles"
+
+  // 视图模式
+  | "gridMode"
+  | "zenMode"
+  | "objectsSnapMode"
+  | "stats"
+  | "viewMode"
+  | "toggleFullScreen"
+  | "toggleShortcuts"
+
+  // 样式属性
   | "changeStrokeColor"
   | "changeBackgroundColor"
   | "changeFillStyle"
   | "changeStrokeWidth"
+  | "changeStrokeShape"
+  | "changeSloppiness"
   | "changeStrokeStyle"
   | "changeArrowhead"
+  | "changeArrowType"
+  | "changeArrowProperties"
   | "changeOpacity"
+  | "changeRoundness"
+
+  // 文本属性
   | "changeFontSize"
   | "changeFontFamily"
   | "changeTextAlign"
   | "changeVerticalAlign"
+  | "increaseFontSize"
+  | "decreaseFontSize"
+  | "unbindText"
+  | "bindText"
+  | "createContainerFromText"
+  | "wrapTextInContainer"
+  | "autoResize"
+
+  // 菜单操作
   | "toggleCanvasMenu"
   | "toggleEditMenu"
+
+  // 历史操作
   | "undo"
   | "redo"
   | "finalize"
+
+  // 文件操作
   | "changeProjectName"
+  | "saveToActiveFile"
+  | "saveFileToDisk"
+  | "loadScene"
+
+  // 导出配置
   | "changeExportBackground"
   | "changeExportEmbedScene"
-  | "changeShouldAddWatermark"
-  | "saveToDisk"
-  | "loadFromJSON"
+  | "changeExportScale"
+  | "exportWithDarkMode"
+
+  // 元素操作
   | "duplicateSelection"
   | "deleteSelectedElements"
+  | "unlockAllElements"
+  | "toggleElementLock"
+
+  // 画布操作
   | "changeViewBackgroundColor"
   | "clearCanvas"
+
+  // 缩放操作
   | "zoomIn"
   | "zoomOut"
   | "resetZoom"
   | "zoomToFit"
-  | "zoomToSelection"
-  | "changeImageFilter"
-  | "createFrameFromSelection"
-  | "removeFrameFromSelection";
+  | "zoomToFitSelection"
+  | "zoomToFitSelectionInViewport"
+
+  // 分组操作
+  | "group"
+  | "ungroup"
+
+  // 对齐操作
+  | "alignTop"
+  | "alignBottom"
+  | "alignLeft"
+  | "alignRight"
+  | "alignVerticallyCentered"
+  | "alignHorizontallyCentered"
+  | "distributeHorizontally"
+  | "distributeVertically"
+
+  // 翻转操作
+  | "flipHorizontal"
+  | "flipVertical"
+
+  // 主题操作
+  | "toggleTheme"
+
+  // 超链接
+  | "hyperlink"
+  | "copyElementLink"
+  | "linkToElement"
+
+  // 工具切换
+  | "toggleLinearEditor"
+  | "toggleEraserTool"
+  | "toggleHandTool"
+  | "toggleLassoTool"
+  | "toggleShapeSwitch"
+  | "togglePolygon"
+
+  // 协作操作
+  | "goToCollaborator"
+
+  // 库操作
+  | "addToLibrary"
+
+  // 框架操作
+  | "selectAllElementsInFrame"
+  | "removeAllElementsFromFrame"
+  | "updateFrameRendering"
+  | "setFrameAsActiveTool"
+  | "wrapSelectionInFrame"
+
+  // 嵌入操作
+  | "setEmbeddableAsActiveTool"
+
+  // 其他
+  | "commandPalette"
+  | "elementStats"
+  | "searchMenu"
+  | "cropEditor";
 ```
 
 ## Action管理器实现

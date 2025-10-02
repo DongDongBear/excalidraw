@@ -4,6 +4,8 @@
 
 现代绘图应用需要支持多种输入方式：鼠标、触摸屏、手写笔、触控板等。Excalidraw 通过精心设计的手势识别系统和统一的输入抽象，提供了流畅的跨设备体验。本章将深入解析这套手势处理系统的实现原理和最佳实践。
 
+**源码验证状态**: 本章基于实际源码验证，但需注意 Excalidraw 的手势系统相对简化，主要通过基础的多点触控处理实现，而非复杂的独立手势识别器架构。
+
 ## 输入系统架构
 
 ### 设备输入类型
@@ -83,20 +85,17 @@ export interface GestureState {
 
 ## 手势识别算法
 
+**架构说明**: 以下章节展示了一个完整的手势识别系统的理论实现。需要注意的是，**Excalidraw 实际使用的是更简化的方案**，主要通过 EVENT 常量和基础的多点触控处理来实现手势功能，而非独立的手势识别器类。
+
 ### 基础手势计算
 
-```typescript
-// packages/excalidraw/gesture.ts
-export const gesture = {
-  pointers: new Map<number, PointerCoords>(),
-  lastCenter: null as PointerCoords | null,
-  initialScale: null as number | null,
-  initialDistance: null as number | null,
-  initialAngle: null as number | null,
-};
+**源码位置**: `packages/excalidraw/gesture.ts` (完整文件仅16行)
 
-// 计算多点中心
-export const getCenter = (pointers: Map<number, PointerCoords>): PointerCoords => {
+```typescript
+// packages/excalidraw/gesture.ts - 实际实现（已验证）
+// 注意：Excalidraw 的 gesture.ts 非常简洁，只提供基础工具函数
+
+export const getCenter = (pointers: Map<number, PointerCoords>) => {
   const allCoords = Array.from(pointers.values());
   return {
     x: sum(allCoords, (coords) => coords.x) / allCoords.length,
@@ -104,10 +103,33 @@ export const getCenter = (pointers: Map<number, PointerCoords>): PointerCoords =
   };
 };
 
-// 计算两点距离
-export const getDistance = ([a, b]: readonly PointerCoords[]): number => {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-};
+export const getDistance = ([a, b]: readonly PointerCoords[]) =>
+  Math.hypot(a.x - b.x, a.y - b.y);
+
+const sum = <T>(array: readonly T[], mapper: (item: T) => number): number =>
+  array.reduce((acc, item) => acc + mapper(item), 0);
+```
+
+**重要发现**: Excalidraw 并未实现独立的 `gesture` 对象或复杂的手势状态管理。手势状态直接在 `App.tsx` 的 `updateGestureOnPointerDown` 方法中管理：
+
+```typescript
+// packages/excalidraw/components/App.tsx - 实际手势处理（已验证）
+private updateGestureOnPointerDown(
+  event: React.PointerEvent<HTMLElement>,
+): void {
+  gesture.pointers.set(event.pointerId, {
+    x: event.clientX,
+    y: event.clientY,
+  });
+  if (gesture.pointers.size === 2) {
+    gesture.lastCenter = getCenter(gesture.pointers);
+    gesture.initialScale = this.state.zoom.value;
+    gesture.initialDistance = getDistance(
+      Array.from(gesture.pointers.values()),
+    );
+  }
+}
+```
 
 // 计算两点角度
 export const getAngle = ([a, b]: readonly PointerCoords[]): number => {
@@ -152,10 +174,55 @@ export const calculateVelocity = (
 };
 ```
 
-### 高级手势识别器
+### EVENT 常量（实际使用）
+
+**源码位置**: `packages/common/src/constants.ts` (lines 78-110)
+
+Excalidraw 实际通过 EVENT 枚举来处理各种输入事件：
 
 ```typescript
-// 手势识别器类
+// packages/common/src/constants.ts - 实际事件常量（已验证）
+export enum EVENT {
+  COPY = "copy",
+  PASTE = "paste",
+  CUT = "cut",
+  KEYDOWN = "keydown",
+  KEYUP = "keyup",
+  MOUSE_MOVE = "mousemove",
+  RESIZE = "resize",
+  UNLOAD = "unload",
+  FOCUS = "focus",
+  BLUR = "blur",
+  DRAG_OVER = "dragover",
+  DROP = "drop",
+  GESTURE_END = "gestureend",          // 手势结束
+  BEFORE_UNLOAD = "beforeunload",
+  GESTURE_START = "gesturestart",      // 手势开始
+  GESTURE_CHANGE = "gesturechange",    // 手势变化
+  POINTER_MOVE = "pointermove",
+  POINTER_DOWN = "pointerdown",
+  POINTER_UP = "pointerup",
+  STATE_CHANGE = "statechange",
+  WHEEL = "wheel",
+  TOUCH_START = "touchstart",
+  TOUCH_END = "touchend",
+  HASHCHANGE = "hashchange",
+  VISIBILITY_CHANGE = "visibilitychange",
+  SCROLL = "scroll",
+  // custom events
+  EXCALIDRAW_LINK = "excalidraw-link",
+  MENU_ITEM_SELECT = "menu.itemSelect",
+  MESSAGE = "message",
+  FULLSCREENCHANGE = "fullscreenchange",
+}
+```
+
+### 高级手势识别器（理论扩展）
+
+**注意**: 以下代码展示了一个完整的手势识别系统设计，但这**不是** Excalidraw 的实际实现。Excalidraw 使用更简化的方法。
+
+```typescript
+// 手势识别器类 - 理论实现示例
 export class GestureRecognizer {
   private state: GestureState;
   private history: PointerHistory[] = [];

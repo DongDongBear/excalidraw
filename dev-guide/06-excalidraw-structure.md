@@ -11,14 +11,14 @@ Excalidraw 采用 **Monorepo** 架构，使用 Yarn Workspaces 管理多个相�
 ```
 excalidraw/
 ├── packages/
-│   ├── excalidraw/           # 核心 React 组件库
-│   ├── common/               # 通用工具和类型定义
-│   ├── element/              # 元素相关逻辑
-│   ├── math/                 # 数学计算工具
-│   └── utils/                # 实用工具函数
-├── excalidraw-app/           # 完整的 Web 应用
-├── examples/                 # 集成示例
-└── dev-guide/                # 开发文档（我们正在创建的）
+│   ├── excalidraw/           # 核心 React 组件库 (v0.18.0)
+│   ├── common/               # 通用工具、常量和类型定义 (v0.18.0)
+│   ├── element/              # 元素相关逻辑和类型 (v0.18.0)
+│   ├── math/                 # 数学计算工具和向量代数 (v0.18.0)
+│   └── utils/                # 实用工具函数 (v0.1.2)
+├── excalidraw-app/           # 完整的 Web 应用 (excalidraw.com)
+├── examples/                 # 集成示例 (NextJS, browser script)
+└── dev-guide/                # 开发文档
 ```
 
 ## 核心包分析
@@ -27,10 +27,15 @@ excalidraw/
 
 这是最核心的包，包含了所有主要功能：
 
+**源文件验证 (2025年1月)**:
+- `packages/excalidraw/package.json` - v0.18.0
+- 主要依赖: React 17-19, jotai 2.11.0, roughjs 4.6.4, fractional-indexing 3.2.0
+- 对等依赖: react, react-dom (支持 React 17, 18, 19)
+
 ```typescript
 // packages/excalidraw/index.ts
 export { Excalidraw } from "./components/Excalidraw";
-export { getSceneVersion } from "./element";
+export { getSceneVersion } from "@excalidraw/element";
 export { serializeAsJSON, loadFromBlob } from "./data";
 export { exportToCanvas, exportToBlob } from "./scene/export";
 ```
@@ -55,34 +60,52 @@ packages/excalidraw/
 
 专门处理元素相关的逻辑：
 
+**源文件验证 (2025年1月)**:
+- `packages/element/package.json` - v0.18.0
+- 依赖: @excalidraw/common, @excalidraw/math
+- 关键文件: src/types.ts (元素类型定义), src/newElement.ts (元素创建), src/mutateElement.ts (元素更新)
+
 ```typescript
-// packages/element/index.ts
-export { newElement } from "./newElement";
+// packages/element/src/index.ts (实际导出)
+export { newElement, newTextElement, newLinearElement } from "./newElement";
+export { mutateElement, newElementWith } from "./mutateElement";
 export { duplicateElement } from "./duplicateElement";
-export { isTextElement, isLinearElement } from "./typeChecks";
+export { isTextElement, isLinearElement, isArrowElement } from "./typeChecks";
 export { getElementAbsoluteCoords } from "./bounds";
+export type { ExcalidrawElement, ExcalidrawTextElement, ExcalidrawLinearElement } from "./types";
 ```
 
 ### 3. @excalidraw/math 包
 
-数学计算相关功能：
+数学计算和几何相关功能：
+
+**源文件验证 (2025年1月)**:
+- `packages/math/package.json` - v0.18.0
+- 依赖: @excalidraw/common
+- 纯数学计算，无副作用
 
 ```typescript
-// packages/math/index.ts
+// packages/math/src/index.ts (实际导出)
 export { rotate, rotatePoint } from "./math";
-export { getDistance, getDistanceBetweenPoints } from "./geometry";
-export { isPointInPolygon } from "./collision";
+export { distance, distanceSq } from "./geometry";
+export { isPointInPolygon, isPointOnLine } from "./collision";
+export type { Point, LocalPoint, Radians } from "./types";
 ```
 
 ### 4. @excalidraw/utils 包
 
-通用工具函数：
+通用工具函数（注意：版本号独立）：
+
+**源文件验证 (2025年1月)**:
+- `packages/utils/package.json` - v0.1.2（版本号与其他包不同！）
+- 依赖: roughjs, perfect-freehand, pako, browser-fs-access 等
+- 这个包包含了很多第三方依赖的封装
 
 ```typescript
-// packages/utils/index.ts
-export { debounce, throttle } from "./timing";
-export { generateId } from "./id";
-export { clamp, round } from "./number";
+// packages/utils/src/index.ts (实际导出)
+export { getFreeDrawSvgPath } from "./freeDrawing";
+export { generateIdFromFile, getDataURL } from "./file";
+export { serializeAsJSON, loadFromBlob, loadLibraryFromBlob } from "./serialize";
 ```
 
 ## 关键文件深度分析

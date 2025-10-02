@@ -43,7 +43,7 @@
 
 #### Excalidraw 的设计应用
 
-**设计决策：工具栏只显示 8 个核心工具**
+**设计决策：工具栏只显示 10 个核心工具**
 
 ```
 传统画板工具：
@@ -51,7 +51,7 @@
 认知负担：高 ❌
 
 Excalidraw 工具栏：
-[选择][矩形][菱形][圆形][箭头][线条][手绘][文本]
+[选择][矩形][菱形][圆形][箭头][线条][手绘][文本][图片][橡皮擦]
 认知负担：低 ✅
 ```
 
@@ -93,15 +93,24 @@ Excalidraw 工具栏：
 **RoughJS 的选择不是技术决策，而是哲学表达：**
 
 ```javascript
-// 技术实现只是哲学的载体
-roughCanvas.rectangle(x, y, width, height, {
-  roughness: 2.5,    // "不完美"的程度
-  seed: 42,          // 保证"随机"的一致性
-  strokeWidth: 2     // 手绘的笔触感
-});
+// Excalidraw 的粗糙度设计（源码：packages/common/src/constants.ts:436-440）
+export const ROUGHNESS = {
+  architect: 0,  // 建筑师模式：完全光滑，无手绘感
+  artist: 1,     // 艺术家模式（默认）：适度的手绘感，平衡专业与亲和
+  cartoonist: 2, // 漫画家模式：明显的手绘感，强调随意和创意
+} as const;
+
+// 实际渲染时，RoughJS 将这些值应用到绘制参数
+// 默认元素使用 roughness: 1（artist），既有手绘风格又保持可读性
+// Frame 使用 roughness: 0，确保辅助元素不抢镜
 ```
 
 **设计智慧：技术选择必须服务于用户心理需求，而非炫耀技术能力**
+
+**三级粗糙度的设计哲学：**
+1. **architect (0)**: 用于辅助元素（如 Frame 边框），不干扰主内容
+2. **artist (1)**: 默认值，最常用，在手绘感和专业性之间取得平衡
+3. **cartoonist (2)**: 强调创意表达，适合头脑风暴和快速草图
 
 ### 3. 功能约束的创新价值
 
@@ -111,7 +120,7 @@ roughCanvas.rectangle(x, y, width, height, {
 
 | 常见功能 | Excalidraw 选择 | 设计哲学 |
 |---------|------------------|----------|
-| **图层系统** | ❌ 不支持 | 避免层级思维的复杂性，专注扁平化表达 |
+| **复杂图层面板** | ⚠️ 简化支持 | 支持 z-index 层级排序（前移/后移），但不提供复杂的图层面板 UI。通过快捷键（Cmd+[/]）实现基本的层级管理，避免层级思维的复杂性 |
 | **精确定位** | ❌ 不支持 | 手绘精神：大概位置比精确像素更符合思维习惯 |
 | **复杂样式** | ❌ 极简支持 | 减少样式选择的认知负担，专注内容创作 |
 | **高级动画** | ❌ 不支持 | 静态表达的清晰性胜过动态效果的炫酷 |
@@ -217,14 +226,15 @@ P3：高级功能（快捷键）
 **功能取舍的具体案例：**
 
 ```markdown
-要不要支持图层？
+要不要支持复杂图层面板？
 
 ✅ 核心价值：可以，支持复杂图形组织
 ❌ 认知负担：增加层级管理的复杂性
 ❌ 维护成本：需要复杂的UI和逻辑
-✅ 替代方案：用群组功能可以替代
+✅ 替代方案：基础的 z-index 排序（前移/后移）+ 群组功能
 
-结论：不支持图层，用群组简化实现
+结论：支持基础的层级排序（sendBackward, bringForward, sendToBack, bringToFront），
+     但不提供复杂的图层面板 UI，用简化的快捷键操作 + 群组功能实现
 ```
 
 ### 策略2：交互简化的设计方法
@@ -271,15 +281,19 @@ Excalidraw：
 **减少配置，增加可用性：**
 
 ```
-颜色默认值：
-- 黑色描边：符合手绘习惯
-- 透明填充：避免遮挡其他元素
-- 中等粗细：平衡清晰度和美观
+颜色默认值（源码：packages/common/src/constants.ts:458-466）：
+- 黑色描边(#1e1e1e)：符合手绘习惯（COLOR_PALETTE.black）
+- 透明填充(transparent)：避免遮挡其他元素（COLOR_PALETTE.transparent）
+- 描边粗细为2：平衡清晰度和美观（strokeWidth: 2）
+- 填充样式为solid：简单直接（fillStyle: "solid"）
+- 粗糙度为1(artist)：适度的手绘感（roughness: ROUGHNESS.artist）
+- 不透明度100%：默认完全可见（opacity: 100）
 
-字体默认值：
-- 系统字体：兼容性最好
-- 适中大小：可读性良好
-- 左对齐：符合阅读习惯
+字体默认值（源码：packages/common/src/constants.ts:227-228）：
+- Excalifont手绘字体：专为手绘风格设计的自定义字体（DEFAULT_FONT_FAMILY: FONT_FAMILY.Excalifont）
+- 字号20px：可读性良好（DEFAULT_FONT_SIZE: 20）
+- 左对齐：符合阅读习惯（DEFAULT_TEXT_ALIGN: "left"）
+- 顶部对齐：符合自然排版（DEFAULT_VERTICAL_ALIGN: "top"）
 ```
 
 #### 上下文智能
@@ -287,10 +301,27 @@ Excalidraw：
 **根据用户行为智能调整默认行为：**
 
 ```
-智能行为示例：
-- 连续创建同类型元素：保持当前工具激活
-- 选择元素后双击：进入编辑模式
-- 拖拽时按住Shift：保持比例/角度
+智能行为示例（源码：packages/excalidraw/components/App.tsx:5492-5680）：
+
+1. 连续创建同类型元素：保持当前工具激活状态
+
+2. 双击(handleCanvasDoubleClick)上下文智能：
+   - 双击空白画布 → 在点击位置创建文本元素（startTextEditing）
+   - 双击容器(container) → 在容器中心创建绑定文本
+   - 双击线条/箭头 → 进入线条编辑模式（actionToggleLinearEditor）
+   - 双击图片元素 → 进入图片裁剪模式（startImageCropping）
+   - 双击组内元素 → 进入组编辑模式，选择该元素
+   - 双击嵌入元素(iframe/embeddable) → 激活嵌入内容
+
+3. 拖拽时按住修饰键的智能行为：
+   - 按住 Shift：保持宽高比/角度约束（SHIFT_LOCKING_ANGLE: Math.PI/12）
+   - 按住 Ctrl/Cmd：创建副本而非移动
+   - 按住 Alt：从中心点缩放
+
+4. 多元素绘制模式（multiElement）：
+   - 创建线条/箭头时保持工具激活
+   - 支持连续添加控制点
+   - 双击或按 Enter 完成绘制
 ```
 
 ---

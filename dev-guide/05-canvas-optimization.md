@@ -2381,87 +2381,74 @@ class CanvasMemoryManager {
 
 ## 7. Excalidraw 中的性能优化
 
-### 7.1 Excalidraw 的渲染优化策略
+### 7.1 Excalidraw 的视口裁剪优化
+
+Excalidraw使用视口裁剪来提升大量元素场景的性能：
 
 ```typescript
-// packages/excalidraw/renderer/index.ts
-export const renderScene = (
-  elements: readonly ExcalidrawElement[],
-  appState: AppState,
-  canvas: HTMLCanvasElement
-) => {
-  const context = canvas.getContext('2d')!;
-  const renderConfig = {
-    viewBackgroundColor: appState.viewBackgroundColor,
-    zoom: appState.zoom,
-    scrollX: appState.scrollX,
-    scrollY: appState.scrollY,
-    isExporting: false
-  };
+// 源码: packages/excalidraw/scene/Renderer.ts:28-68
+// Excalidraw的核心渲染优化：只渲染可见元素
+const getVisibleCanvasElements = ({
+  elementsMap,
+  zoom,
+  offsetLeft,
+  offsetTop,
+  scrollX,
+  scrollY,
+  height,
+  width,
+}: {
+  elementsMap: NonDeletedElementsMap;
+  zoom: AppState["zoom"];
+  offsetLeft: AppState["offsetLeft"];
+  offsetTop: AppState["offsetTop"];
+  scrollX: AppState["scrollX"];
+  scrollY: AppState["scrollY"];
+  height: AppState["height"];
+  width: AppState["width"];
+}): readonly NonDeletedExcalidrawElement[] => {
+  const visibleElements: NonDeletedExcalidrawElement[] = [];
 
-  // 视口裁剪优化
-  const visibleElements = getVisibleElements(
-    elements,
-    canvas.width,
-    canvas.height,
-    appState
-  );
-
-  // 分层渲染
-  const staticElements = visibleElements.filter(el => !el.isBeingEdited);
-  const dynamicElements = visibleElements.filter(el => el.isBeingEdited);
-
-  // 静态层缓存
-  if (shouldUpdateStaticLayer(staticElements, appState)) {
-    renderStaticLayer(staticElements, context, renderConfig);
+  // 关键优化：使用isElementInViewport进行视口裁剪
+  // 源码位于: packages/element/src/visibility.ts
+  for (const element of elementsMap.values()) {
+    if (
+      isElementInViewport(
+        element,
+        width,
+        height,
+        { zoom, offsetLeft, offsetTop, scrollX, scrollY },
+        elementsMap,
+      )
+    ) {
+      visibleElements.push(element);
+    }
   }
-
-  // 动态层实时渲染
-  renderDynamicLayer(dynamicElements, context, renderConfig);
+  return visibleElements;
 };
+```
 
-// 视口裁剪
-const getVisibleElements = (
-  elements: readonly ExcalidrawElement[],
-  canvasWidth: number,
-  canvasHeight: number,
-  appState: AppState
-): ExcalidrawElement[] => {
-  const viewportBounds = getViewportBounds(canvasWidth, canvasHeight, appState);
+### 7.2 Excalidraw 的实际渲染架构
 
-  return elements.filter(element => {
-    const elementBounds = getElementBounds(element);
-    return boundsIntersect(viewportBounds, elementBounds);
-  });
-};
+Excalidraw使用**双Canvas分层渲染**策略（源码: packages/excalidraw/components/canvases/）：
 
-// 静态层缓存策略
-let staticLayerCache: {
-  canvas: HTMLCanvasElement;
-  elements: ExcalidrawElement[];
-  appState: Partial<AppState>;
-} | null = null;
+1. **StaticCanvas** - 渲染静态内容，使用throttle减少重绘
+   - 源码: `packages/excalidraw/renderer/staticScene.ts`
+   - 使用 `renderStaticSceneThrottled` 函数节流渲染
 
-const shouldUpdateStaticLayer = (
-  elements: ExcalidrawElement[],
-  appState: AppState
-): boolean => {
-  if (!staticLayerCache) return true;
+2. **InteractiveCanvas** - 渲染动态交互元素
+   - 源码: `packages/excalidraw/renderer/interactiveScene.ts`
+   - 使用 `renderInteractiveSceneThrottled` 函数节流渲染
 
-  // 检查元素是否发生变化
-  if (elements.length !== staticLayerCache.elements.length) {
-    return true;
-  }
+```typescript
+// 源码: packages/excalidraw/scene/Renderer.ts:13-14
+import { renderInteractiveSceneThrottled } from "../renderer/interactiveScene";
+import { renderStaticSceneThrottled } from "../renderer/staticScene";
 
-  // 检查视图状态是否变化
-  const relevantAppState = {
-    zoom: appState.zoom,
-    scrollX: appState.scrollX,
-    scrollY: appState.scrollY
-  };
-
-  return !isEqual(relevantAppState, staticLayerCache.appState);
-};
+// 关键性能优化策略：
+// 1. 使用throttleRAF进行帧率控制，避免过度渲染
+// 2. 静态层和交互层分离，减少不必要的重绘
+// 3. 视口裁剪，只渲染可见区域的元素
 ```
 
 ## 8. 练习题

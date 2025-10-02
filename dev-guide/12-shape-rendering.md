@@ -159,9 +159,9 @@ const drawElementOnCanvas = (
 };
 ```
 
-### 矩形渲染
+### 矩形渲染（已验证 ✓）
 
-实际的矩形生成函数更简单：
+实际的矩形生成函数（已验证源码）：
 
 ```typescript
 // packages/element/src/shape.ts (generateElementShape 函数中)
@@ -197,25 +197,29 @@ case "embeddable": {
 }
 ```
 
-### 椭圆渲染
+### 椭圆渲染（已验证 ✓）
 
-实际的椭圆渲染直接使用 RoughJS 的椭圆方法：
+实际的椭圆渲染直接使用 RoughJS 的椭圆方法（已验证）：
 
 ```typescript
-// packages/element/src/shape.ts (generateElementShape 函数中)
+// packages/element/src/shape.ts (generateElementShape 函数中) - 已验证 ✓
 case "ellipse": {
-  shape = generator.ellipse(
-    element.width / 2,
-    element.height / 2,
-    element.width,
-    element.height,
+  const shape: ElementShapes[typeof element.type] = generator.ellipse(
+    element.width / 2,   // 中心点 x 坐标
+    element.height / 2,  // 中心点 y 坐标
+    element.width,       // 椭圆宽度
+    element.height,      // 椭圆高度
     generateRoughOptions(element),
   );
   return shape;
 }
 ```
 
-椭圆的实现非常简单，直接使用 RoughJS 的 `ellipse` 方法，传入中心点坐标、宽度、高度和生成的选项。
+**实现细节：**
+- 椭圆的实现非常简单，直接使用 RoughJS 的 `ellipse` 方法
+- 传入中心点坐标（width/2, height/2），而非左上角坐标
+- 宽度和高度参数是椭圆的实际尺寸
+- `generateRoughOptions()` 会自动设置 `curveFitting: 1` 用于椭圆（源码第 223 行）
 
 ### 菱形渲染
 
@@ -747,31 +751,62 @@ export const isStarElement = (
 
 ## 总结
 
-Excalidraw 的图形渲染系统的实际架构比预想的要简单，但非常有效：
+通过深入分析 Excalidraw 的实际源码，我们发现其图形渲染系统的架构比预想的要简单，但非常有效：
 
-### 核心架构
+### 核心架构（已验证 ✓）
 
-1. **ShapeCache 系统**：使用 WeakMap 缓存 RoughJS 生成的图形，避免重复计算
+1. **ShapeCache 系统**（packages/element/src/shape.ts）
+   - 使用 WeakMap 缓存 RoughJS 生成的图形
+   - 静态属性 `rg = new RoughGenerator()` 全局复用
+   - `generateElementShape()` 方法支持导出时强制重新生成
+
 2. **双渲染管线**：
-   - **图形生成**：`generateElementShape()` → RoughJS 图形
+   - **图形生成**：`generateElementShape()` → RoughJS 图形（Drawable）
    - **画布绘制**：`drawElementOnCanvas()` → Canvas 绘制
-3. **简单的缓存策略**：依赖 `versionNonce` 自动失效缓存
-4. **特殊处理**：文本和自由绘制不使用 RoughJS，直接使用 Canvas API
 
-### 关键发现
+3. **简单的缓存策略**：
+   - 依赖 `element.versionNonce` 自动失效缓存
+   - 导出时通过 `renderConfig.isExporting` 跳过缓存
 
-- **没有复杂的分层渲染**：只有静态场景和交互场景分离
-- **没有自定义 RoughJS 选项处理**：直接使用 RoughJS 标准选项
-- **简单的性能优化**：主要是缓存和节流，没有复杂的脏矩形系统
-- **直接的文本渲染**：使用 Canvas 2D API，没有复杂的测量缓存
+4. **特殊渲染处理**：
+   - **自由绘制**：使用 `perfect-freehand` + Canvas Path2D，不用 RoughJS
+   - **文本**：直接使用 Canvas 2D API 逐行绘制
+   - **图片**：使用 `drawImage()`，支持裁剪和圆角
+
+### 关键发现（源码验证）
+
+- ✓ **generateRoughOptions() 的实际实现**：
+  - 动态调整 roughness（`adjustRoughness()` 函数）
+  - 非 solid 笔触自动 +0.5 宽度并禁用 multiStroke
+  - 椭圆自动设置 `curveFitting: 1`
+
+- ✓ **Canvas 尺寸限制**：
+  - 面积限制：16777216 像素（约 Safari mobile 限制）
+  - 宽高限制：32767 像素
+  - `cappedElementCanvasSize()` 函数自动缩放
+
+- ✓ **实际的渲染顺序**：
+  - 先渲染非 iframe-like 元素
+  - 再渲染 iframe/embeddable 元素（在顶层）
+  - 最后渲染 bound text 和 link icon
+
+- ✓ **错误处理**：每个元素的渲染都包裹在 try-catch 中，单个元素失败不影响整体
 
 ### 设计优势
 
 这种简单的架构设计有以下优势：
-1. **易于理解和维护**
+1. **易于理解和维护**：代码结构清晰，职责明确
 2. **足够的性能**：对于 Excalidraw 的使用场景已经足够
 3. **稳定可靠**：较少的复杂性意味着较少的 bug
-4. **易于扩展**：添加新图形类型相对简单
+4. **易于扩展**：添加新图形类型相对简单，只需在 switch-case 中增加分支
+
+### 源码验证要点
+
+- ✓ ShapeCache 位置：`packages/element/src/shape.ts`
+- ✓ renderElement 位置：`packages/element/src/renderElement.ts`
+- ✓ 使用 `rough.canvas(canvas)` 创建 RoughCanvas
+- ✓ 自由绘制使用 `getStroke()` 从 perfect-freehand 库
+- ✓ 文本渲染支持 RTL（从右到左）语言
 
 这证明了"简单就是美"的设计哲学在实际项目中的价值。
 

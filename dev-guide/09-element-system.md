@@ -30,36 +30,64 @@ graph TD
 ### 元素工厂模式
 
 ```typescript
-// packages/element/newElement.ts
-export const newElement = <T extends ExcalidrawElement>(
-  opts: {
-    type: T["type"];
-  } & Partial<Omit<T, "id" | "type" | "updated" | "seed" | "versionNonce">>
-): T => {
-  const {
-    type,
-    x = 0,
-    y = 0,
+// 源文件: packages/element/src/newElement.ts (实际源码，2025年1月验证)
+
+// 元素构造选项类型（大部分字段都是可选的）
+export type ElementConstructorOpts = MarkOptional<
+  Omit<ExcalidrawGenericElement, "id" | "type" | "isDeleted" | "updated">,
+  | "width"
+  | "height"
+  | "angle"
+  | "groupIds"
+  | "frameId"
+  | "index"
+  | "boundElements"
+  | "seed"
+  | "version"
+  | "versionNonce"
+  | "link"
+  | "strokeStyle"
+  | "fillStyle"
+  | "strokeColor"
+  | "backgroundColor"
+  | "roughness"
+  | "strokeWidth"
+  | "roundness"
+  | "locked"
+  | "opacity"
+  | "customData"
+>;
+
+// 核心元素创建函数（内部实现）
+const _newElementBase = <T extends ExcalidrawElement>(
+  type: T["type"],
+  {
+    x,
+    y,
+    strokeColor = DEFAULT_ELEMENT_PROPS.strokeColor,
+    backgroundColor = DEFAULT_ELEMENT_PROPS.backgroundColor,
+    fillStyle = DEFAULT_ELEMENT_PROPS.fillStyle,
+    strokeWidth = DEFAULT_ELEMENT_PROPS.strokeWidth,
+    strokeStyle = DEFAULT_ELEMENT_PROPS.strokeStyle,
+    roughness = DEFAULT_ELEMENT_PROPS.roughness,
+    opacity = DEFAULT_ELEMENT_PROPS.opacity,
     width = 0,
     height = 0,
-    angle = 0,
-    strokeColor = "#000000",
-    backgroundColor = "transparent",
-    fillStyle = "solid",
-    strokeWidth = 1,
-    strokeStyle = "solid",
-    roughness = 1,
-    opacity = 100,
+    angle = 0 as Radians,
     groupIds = [],
     frameId = null,
-    index = randomInteger() as FractionalIndex,
+    index = null,  // 注意：默认为 null，会在后续处理中生成
     roundness = null,
-    seed = randomInteger(),
+    boundElements = null,
+    link = null,
+    locked = DEFAULT_ELEMENT_PROPS.locked,
+    customData,
     ...rest
-  } = opts;
-
-  const element: Omit<ExcalidrawGenericElement, "type"> = {
-    id: randomId(),
+  }: ElementConstructorOpts & { type?: T["type"] },
+): Omit<T, "type"> => {
+  const element = {
+    id: rest.id || randomId(),
+    type,
     x,
     y,
     width,
@@ -76,17 +104,18 @@ export const newElement = <T extends ExcalidrawElement>(
     frameId,
     index,
     roundness,
-    seed,
-    versionNonce: randomInteger(),
+    seed: rest.seed ?? randomInteger(),
+    version: rest.version || 1,
+    versionNonce: rest.versionNonce ?? randomInteger(),
     isDeleted: false,
-    link: null,
-    locked: false,
-    boundElements: null,
-    updated: Date.now(),
-    ...rest,
+    boundElements,
+    updated: getUpdatedTimestamp(),
+    link,
+    locked,
+    ...(customData ? { customData } : {}),
   };
 
-  return { ...element, type } as T;
+  return element as Omit<T, "type">;
 };
 ```
 
@@ -173,20 +202,65 @@ export const newArrowElement = (
 ### 元素变更 (Mutation)
 
 ```typescript
-// packages/element/mutateElement.ts
-export const mutateElement = <TElement extends ExcalidrawElement>(
+// 源文件: packages/element/src/mutateElement.ts (实际源码，2025年1月验证)
+
+/**
+ * 元素变更函数 - 用于不可变更新元素
+ *
+ * 注意：这是 Excalidraw 中最常用的元素更新函数
+ * - 自动更新 versionNonce 和 updated 时间戳
+ * - 对特殊元素类型（如 elbowed arrow）有特殊处理
+ * - 需要传入 elementsMap 以便处理元素之间的关系
+ */
+export const mutateElement = <TElement extends Mutable<ExcalidrawElement>>(
   element: TElement,
-  updates: Partial<TElement>,
-  informMutation = true
-): TElement => {
+  elementsMap: ElementsMap,  // 注意：需要传入元素映射表
+  updates: ElementUpdate<TElement>,
+  options?: {
+    isDragging?: boolean;
+  },
+) => {
   let didChange = false;
+
+  // 特殊处理：肘形箭头需要重新计算点位
+  const { points, fixedSegments, startBinding, endBinding, fileId } = updates as any;
+
+  if (
+    isElbowArrow(element) &&
+    (Object.keys(updates).length === 0 ||
+      typeof points !== "undefined" ||
+      typeof fixedSegments !== "undefined" ||
+      typeof startBinding !== "undefined" ||
+      typeof endBinding !== "undefined")
+  ) {
+    // 肘形箭头的特殊逻辑
+    updates = {
+      ...updates,
+      angle: 0 as Radians,
+      ...updateElbowArrowPoints(
+        {
+          ...element,
+          x: updates.x || element.x,
+          y: updates.y || element.y,
+          // ... 更多特殊处理
+        },
+        elementsMap,
+      ),
+    };
+  }
 
   // 检查是否有实际变更
   for (const key in updates) {
-    if (
-      key in element &&
-      element[key as keyof TElement] !== updates[key as keyof TElement]
-    ) {
+    const value = (updates as any)[key];
+    if (typeof value !== "undefined") {
+      if (
+        (element as any)[key] === value &&
+        // 特殊处理 points 数组比较
+        (key !== "points" ||
+          (element as any).points?.length === value.length)
+      ) {
+        continue;
+      }
       didChange = true;
       break;
     }
@@ -196,44 +270,31 @@ export const mutateElement = <TElement extends ExcalidrawElement>(
     return element;
   }
 
+  // 创建更新后的元素
   const updated: TElement = {
     ...element,
     ...updates,
-    updated: Date.now(),
+    updated: getUpdatedTimestamp(),
+    version: element.version + 1,
+    versionNonce: randomInteger(),
   };
-
-  // 通知变更监听器
-  if (informMutation) {
-    Scene.informMutation();
-  }
 
   return updated;
 };
 
-// 批量变更多个元素
-export const mutateElements = <T extends ExcalidrawElement>(
-  elements: readonly T[],
-  updates: Partial<T> | ((element: T) => Partial<T>),
-  informMutation = true
-): readonly T[] => {
-  let didChange = false;
-
-  const updatedElements = elements.map(element => {
-    const elementUpdates = typeof updates === "function" ? updates(element) : updates;
-    const updated = mutateElement(element, elementUpdates, false);
-
-    if (updated !== element) {
-      didChange = true;
-    }
-
-    return updated;
-  });
-
-  if (didChange && informMutation) {
-    Scene.informMutation();
-  }
-
-  return didChange ? updatedElements : elements;
+/**
+ * 创建新元素（基于现有元素）
+ * 这是一个辅助函数，用于创建元素的副本并应用更新
+ */
+export const newElementWith = <T extends ExcalidrawElement>(
+  element: T,
+  updates: Partial<T>,
+): T => {
+  return {
+    ...element,
+    ...updates,
+    updated: getUpdatedTimestamp(),
+  };
 };
 ```
 

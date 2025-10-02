@@ -29,34 +29,55 @@ graph TD
 
 ## React 状态管理模式
 
-### 主要状态容器
+**源文件验证 (2025年1月)**:
+- 主要状态管理工具: **Jotai 2.11.0** (原子状态管理库)
+- 源文件: `excalidraw-app/app-jotai.ts`, `packages/excalidraw/components/App.tsx`
+- Excalidraw 使用 React useState + Jotai atoms 混合架构
+
+### Jotai 原子状态管理
+
+Excalidraw 使用 Jotai 管理部分全局状态：
 
 ```typescript
-// packages/excalidraw/components/App.tsx
+// excalidraw-app/app-jotai.ts (实际源码)
+import { atom } from "jotai";
+
+// 协作状态原子
+export const collabAPIAtom = atom<CollabAPI | null>(null);
+export const collabDialogShownAtom = atom(false);
+export const isCollaboratingAtom = atom(false);
+
+// 用户状态原子
+export const activeRoomLinkAtom = atom<string | null>(null);
+```
+
+### 主要状态容器（React + Jotai 混合）
+
+```typescript
+// packages/excalidraw/components/App.tsx (实际源码结构)
 export const App = forwardRef<ExcalidrawAPIRefValue, AppProps>((props, ref) => {
-  // 核心状态：元素数组
+  // 核心状态：元素数组（使用 React useState）
   const [elements, setElements] = useState<readonly ExcalidrawElement[]>(() =>
     props.initialData?.elements || []
   );
 
-  // 核心状态：应用状态
+  // 核心状态：应用状态（使用 React useState）
   const [appState, setAppState] = useState<AppState>(() => ({
     ...getDefaultAppState(),
     ...props.initialData?.appState,
   }));
 
-  // 历史管理状态
-  const [history, setHistory] = useState<History>(() => {
-    return {
-      undoStack: [],
-      redoStack: [],
-    };
-  });
+  // 协作状态（使用 Jotai atoms）
+  const [isCollaborating] = useAtom(isCollaboratingAtom);
+  const [collabAPI] = useAtom(collabAPIAtom);
 
   // UI 相关状态
   const [showShortcutsDialog, setShowShortcutsDialog] = useState(false);
   const [isLoadingImageElement, setIsLoadingImageElement] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // 文件处理状态
+  const [files, setFiles] = useState<BinaryFiles>({});
 
   // ... 其他状态
 });

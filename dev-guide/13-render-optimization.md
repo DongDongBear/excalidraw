@@ -314,45 +314,92 @@ if (existingCanvas?.element.versionNonce === element.versionNonce) {
 
 ## 节流系统
 
-### throttleRAF - 核心节流机制
+### throttleRAF - 核心节流机制（已验证 ✓）
 
 Excalidraw 的性能优化主要依赖一个简单但有效的 requestAnimationFrame 节流函数：
 
 ```typescript
-// packages/excalidraw/utils/throttle.ts
-export const throttleRAF = <T extends (...args: any[]) => any>(
-  fn: T,
-  opts?: { trailing?: boolean }
-): T => {
-  let rafId: number | null = null;
-  let lastArgs: Parameters<T> | null = null;
+// packages/common/src/utils.ts（实际位置 ✓）
+export const throttleRAF = <T extends any[]>(
+  fn: (...args: T) => void,
+  opts?: { trailing?: boolean },
+) => {
+  let timerId: number | null = null;
+  let lastArgs: T | null = null;
+  let lastArgsTrailing: T | null = null;
 
-  const throttled = (...args: Parameters<T>) => {
+  const scheduleFunc = (args: T) => {
+    timerId = window.requestAnimationFrame(() => {
+      timerId = null;
+      fn(...args);
+      lastArgs = null;
+      // 处理尾调用
+      if (lastArgsTrailing) {
+        lastArgs = lastArgsTrailing;
+        lastArgsTrailing = null;
+        scheduleFunc(lastArgs);
+      }
+    });
+  };
+
+  const ret = (...args: T) => {
+    // 测试环境直接执行，不节流
+    if (isTestEnv()) {
+      fn(...args);
+      return;
+    }
     lastArgs = args;
-
-    if (rafId === null) {
-      rafId = requestAnimationFrame(() => {
-        fn(...lastArgs!);
-        rafId = null;
-
-        // 处理尾调用
-        if (opts?.trailing && lastArgs) {
-          throttled(...lastArgs);
-        }
-      });
+    if (timerId === null) {
+      scheduleFunc(lastArgs);
+    } else if (opts?.trailing) {
+      lastArgsTrailing = args;
     }
   };
 
-  return throttled as T;
+  // 提供 flush 方法：立即执行并清理
+  ret.flush = () => {
+    if (timerId !== null) {
+      cancelAnimationFrame(timerId);
+      timerId = null;
+    }
+    if (lastArgs) {
+      fn(...(lastArgsTrailing || lastArgs));
+      lastArgs = lastArgsTrailing = null;
+    }
+  };
+
+  // 提供 cancel 方法：仅清理，不执行
+  ret.cancel = () => {
+    lastArgs = lastArgsTrailing = null;
+    if (timerId !== null) {
+      cancelAnimationFrame(timerId);
+      timerId = null;
+    }
+  };
+
+  return ret;
 };
 ```
 
-### 节流的实际应用
+**关键发现：**
 
-两个主要的渲染函数都使用了 throttleRAF：
+1. **实际位置**：`packages/common/src/utils.ts`，而非 excalidraw/utils/throttle.ts
+2. **测试环境优化**：使用 `isTestEnv()` 检查，测试时直接执行不节流
+3. **两个参数追踪**：
+   - `lastArgs`：当前待执行的参数
+   - `lastArgsTrailing`：尾调用参数（trailing 模式）
+4. **两个控制方法**：
+   - `flush()`：立即执行并清理
+   - `cancel()`：仅清理，不执行
+5. **使用 `window.requestAnimationFrame`**：明确使用 window 对象
+
+### 节流的实际应用（已验证 ✓）
+
+两个主要的渲染函数都使用了 throttleRAF（已验证源码）：
 
 ```typescript
-// packages/excalidraw/renderer/staticScene.ts
+// packages/excalidraw/renderer/staticScene.ts（第 464 行 ✓）
+/** throttled to animation framerate */
 export const renderStaticSceneThrottled = throttleRAF(
   (config: StaticSceneRenderConfig) => {
     _renderStaticScene(config);
@@ -360,29 +407,45 @@ export const renderStaticSceneThrottled = throttleRAF(
   { trailing: true },
 );
 
-// packages/excalidraw/renderer/interactiveScene.ts
+// packages/excalidraw/renderer/interactiveScene.ts（第 1198 行 ✓）
+/** throttled to animation framerate */
 export const renderInteractiveSceneThrottled = throttleRAF(
   (config: InteractiveSceneRenderConfig) => {
     const ret = _renderInteractiveScene(config);
-    config.callback?.(ret);
+    config.callback?.(ret);  // 注意：callback 可选
   },
   { trailing: true },
 );
+
+// 使用方式（staticScene.ts 第 474 行）
+export const renderStaticScene = (
+  renderConfig: StaticSceneRenderConfig,
+  throttle?: boolean,
+) => {
+  if (throttle) {
+    renderStaticSceneThrottled(renderConfig);
+    return;
+  }
+  _renderStaticScene(renderConfig);
+};
 ```
 
-这种节流策略确保：
-1. 渲染频率不会超过显示器刷新率（通常 60fps）
-2. 在频繁更新时，只有最后一次调用会被执行
-3. `trailing: true` 确保最后的状态总是被渲染
+**这种节流策略确保：**
+
+1. **渲染频率限制**：不会超过显示器刷新率（通常 60fps）
+2. **批量处理优化**：在频繁更新时，只有最后一次调用会被执行
+3. **尾调用保证**：`trailing: true` 确保最后的状态总是被渲染
+4. **可选节流**：通过 `throttle` 参数控制是否使用节流版本
+5. **Renderer.destroy() 清理**：调用 `throttled.cancel()` 清理待执行的任务
 
 ## Canvas 尺寸限制处理
 
-### 实际的性能优化：Canvas 尺寸管理
+### Canvas 尺寸限制处理（已验证 ✓）
 
 Excalidraw 的一个重要优化是对 Canvas 尺寸的智能管理，避免创建过大的 Canvas：
 
 ```typescript
-// packages/element/src/renderElement.ts
+// packages/element/src/renderElement.ts（第 168-221 行 ✓）
 const cappedElementCanvasSize = (
   element: NonDeletedExcalidrawElement,
   elementsMap: ElementsMap,
@@ -393,10 +456,22 @@ const cappedElementCanvasSize = (
   scale: number;
 } => {
   // 浏览器 Canvas 限制（保守估计）
+  // 源码注释：these limits are ballpark, they depend on specific browsers and device
   const AREA_LIMIT = 16777216;     // ~safari mobile canvas area limit
   const WIDTH_HEIGHT_LIMIT = 32767;  // ~safari width/height limit
 
   const padding = getCanvasPadding(element);
+
+  const [x1, y1, x2, y2] = getElementAbsoluteCoords(element, elementsMap);
+  const elementWidth =
+    isLinearElement(element) || isFreeDrawElement(element)
+      ? distance(x1, x2)
+      : element.width;
+  const elementHeight =
+    isLinearElement(element) || isFreeDrawElement(element)
+      ? distance(y1, y2)
+      : element.height;
+
   let width = elementWidth * window.devicePixelRatio + padding * 2;
   let height = elementHeight * window.devicePixelRatio + padding * 2;
   let scale: number = zoom.value;
@@ -420,6 +495,16 @@ const cappedElementCanvasSize = (
   return { width, height, scale };
 };
 ```
+
+**关键实现细节：**
+
+1. **设备像素比处理**：使用 `window.devicePixelRatio` 确保高 DPI 屏幕清晰
+2. **线性元素特殊处理**：使用 `distance()` 计算实际宽高，而非 element.width
+3. **双重限制检查**：
+   - 单边限制：32767 像素
+   - 面积限制：16777216 像素²
+4. **动态缩放**：当超限时自动计算合适的 scale
+5. **Padding 计算**：通过 `getCanvasPadding()` 根据元素类型设置不同的内边距
 
 ### 错误处理与回退
 
@@ -657,20 +742,55 @@ Excalidraw 的性能优化策略体现了"简单就是美"的设计哲学：
 
 ## 总结
 
-Excalidraw 的性能优化策略是实用主义的完美体现：
+通过深入分析 Excalidraw 的实际源码，我们发现其性能优化策略是实用主义的完美体现：
 
-### 核心策略
-1. **缓存系统**：ShapeCache + elementWithCanvasCache 双层缓存
-2. **节流控制**：throttleRAF 防止过度渲染
-3. **场景分离**：静态场景 + 交互场景分离
-4. **视口过滤**：只渲染可见元素
-5. **容量控制**：限制 Canvas 尺寸防止崩溃
+### 核心策略（已验证 ✓）
 
-### 设计智慧
+1. **双层缓存系统**
+   - **ShapeCache**（packages/element/src/shape.ts）：缓存 RoughJS 生成的 Drawable
+   - **elementWithCanvasCache**（packages/element/src/renderElement.ts）：缓存元素的 Canvas
+
+2. **throttleRAF 节流**（packages/common/src/utils.ts）
+   - 使用 `window.requestAnimationFrame` 限制渲染频率
+   - 支持 `trailing: true` 确保最后状态被渲染
+   - 提供 `flush()` 和 `cancel()` 方法
+   - 测试环境自动跳过节流
+
+3. **场景分离**
+   - **staticScene**（packages/excalidraw/renderer/staticScene.ts）：渲染元素本体
+   - **interactiveScene**（packages/excalidraw/renderer/interactiveScene.ts）：渲染 UI 元素
+
+4. **视口过滤**（Renderer.getRenderableElements）
+   - 通过 `isElementInViewport()` 过滤可见元素
+   - 使用 `memoize` 缓存过滤结果
+   - 基于 `sceneNonce` 失效缓存
+
+5. **Canvas 尺寸限制**
+   - 面积限制：16777216 像素（Safari mobile）
+   - 宽高限制：32767 像素
+   - 动态缩放：`cappedElementCanvasSize()` 自动调整
+
+### 设计智慧（源码验证）
+
 - **不过度设计**：没有实现复杂的脏矩形、四叉树等算法
-- **依靠现代浏览器**：充分利用 requestAnimationFrame、WeakMap 等现代 API
-- **关注实际瓶颈**：重点优化真正耗时的操作（RoughJS 计算、重复渲染）
+- **依靠现代浏览器**：
+  - `requestAnimationFrame` 天然 60fps 限制
+  - `WeakMap` 自动内存管理
+  - `window.devicePixelRatio` 高 DPI 支持
+- **关注实际瓶颈**：
+  - RoughJS 计算是主要瓶颈 → ShapeCache 缓存
+  - 重复渲染是问题 → throttleRAF 节流
+  - 大元素创建开销大 → Canvas 尺寸限制
 - **保持简洁**：代码简单、易维护、bug 少
+
+### 源码验证要点
+
+- ✓ throttleRAF 实际位置：`packages/common/src/utils.ts`
+- ✓ 节流函数提供 `flush()` 和 `cancel()` 方法
+- ✓ 测试环境通过 `isTestEnv()` 跳过节流
+- ✓ Canvas 限制值来自 Safari 的实际限制
+- ✓ 线性元素使用 `distance()` 计算宽高
+- ✓ 错误处理：每个元素渲染包裹在 try-catch 中
 
 这种"恰到好处"的优化策略，既保证了性能，又保持了代码的简洁性和可维护性，是 Web 应用性能优化的优秀范例。
 

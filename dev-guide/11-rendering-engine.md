@@ -134,7 +134,9 @@ export class Renderer {
           continue;
         }
 
-        // 跳过正在编辑的文本元素（远程渲染）
+        // 跳过正在编辑的文本元素（远程协作时渲染）
+        // 源码注释：we don't want to render text element that's being currently edited
+        //          (it's rendered on remote only)
         if (
           !editingTextElement ||
           editingTextElement.type !== "text" ||
@@ -167,6 +169,7 @@ export class Renderer {
       height: AppState["height"];
       width: AppState["width"];
       editingTextElement: AppState["editingTextElement"];
+      /** 源码注释：first render of newElement will always bust the cache */
       newElementId: ExcalidrawElement["id"] | undefined;
       sceneNonce: ReturnType<InstanceType<typeof Scene>["getSceneNonce"]>;
     }) => {
@@ -197,6 +200,8 @@ export class Renderer {
   })();
 
   // 销毁方法：清理缓存和取消节流
+  // NOTE: Doesn't destroy everything (scene, rc, etc.) because it may not be
+  //       safe to break TS contract here (for upstream cases)
   public destroy() {
     renderInteractiveSceneThrottled.cancel();
     renderStaticSceneThrottled.cancel();
@@ -351,55 +356,134 @@ class PerformanceComparison {
 
 ## 场景图管理
 
-### Scene 类架构
+### Scene 类架构（已验证）
 
 ```typescript
-// packages/excalidraw/scene/Scene.ts
+// packages/element/src/Scene.ts（实际源码位置 ✓）
 export class Scene {
-  private elements: Map<string, ExcalidrawElement>;
-  private nonDeletedElements: ExcalidrawElement[];
-  private sceneNonce: number = 0;
+  // 实际的数据结构（已验证 ✓）
+  private callbacks: Set<SceneStateCallback> = new Set();
+  private nonDeletedElements: readonly Ordered<NonDeletedExcalidrawElement>[] = [];
+  private nonDeletedElementsMap = toBrandedType<NonDeletedSceneElementsMap>(new Map());
+  private elements: readonly OrderedExcalidrawElement[] = [];
+  private nonDeletedFramesLikes: readonly NonDeleted<ExcalidrawFrameLikeElement>[] = [];
+  private frames: readonly ExcalidrawFrameLikeElement[] = [];
+  private elementsMap = toBrandedType<SceneElementsMap>(new Map());
 
-  constructor(elements?: ExcalidrawElement[]) {
-    this.elements = new Map();
-    this.nonDeletedElements = [];
+  /**
+   * Random integer regenerated each scene update.
+   *
+   * Does not relate to elements versions, it's only a renderer
+   * cache-invalidation nonce at the moment.
+   */
+  private sceneNonce: number | undefined;
 
+  constructor(
+    elements: ElementsMapOrArray | null = null,
+    options?: { skipValidation?: true; },
+  ) {
     if (elements) {
-      this.replaceAllElements(elements);
+      this.replaceAllElements(elements, options);
     }
   }
 
-  // 场景版本管理
+  // 场景版本管理（缓存失效机制）
   getSceneNonce() {
     return this.sceneNonce;
   }
 
-  // 元素查询
-  getNonDeletedElements(): readonly NonDeletedExcalidrawElement[] {
-    return this.nonDeletedElements as NonDeletedExcalidrawElement[];
+  // 元素查询方法
+  getNonDeletedElements() {
+    return this.nonDeletedElements;
   }
 
-  getElement(id: string): ExcalidrawElement | null {
-    return this.elements.get(id) || null;
+  getNonDeletedElementsMap() {
+    return this.nonDeletedElementsMap;
   }
 
-  // 批量更新元素
-  replaceAllElements(nextElements: readonly ExcalidrawElement[]) {
-    this.elements.clear();
-    this.nonDeletedElements = [];
+  getElement<T extends ExcalidrawElement>(id: T["id"]): T | null {
+    return (this.elementsMap.get(id) as T | undefined) || null;
+  }
 
-    nextElements.forEach(element => {
-      this.elements.set(element.id, element);
-      if (!element.isDeleted) {
-        this.nonDeletedElements.push(element);
+  getNonDeletedElement(
+    id: ExcalidrawElement["id"],
+  ): NonDeleted<ExcalidrawElement> | null {
+    const element = this.getElement(id);
+    if (element && isNonDeletedElement(element)) {
+      return element;
+    }
+    return null;
+  }
+
+  // 批量更新元素（核心方法）
+  replaceAllElements(
+    nextElements: ElementsMapOrArray,
+    options?: { skipValidation?: true; },
+  ) {
+    const _nextElements = toArray(nextElements);
+    const nextFrameLikes: ExcalidrawFrameLikeElement[] = [];
+
+    // 验证分数索引（用于元素排序）
+    if (!options?.skipValidation) {
+      validateIndicesThrottled(_nextElements);
+    }
+
+    // 同步无效索引
+    this.elements = syncInvalidIndices(_nextElements);
+    this.elementsMap.clear();
+
+    this.elements.forEach((element) => {
+      if (isFrameLikeElement(element)) {
+        nextFrameLikes.push(element);
       }
+      this.elementsMap.set(element.id, element);
     });
 
-    // 递增版本号，触发缓存失效
-    this.sceneNonce++;
+    // 构建非删除元素映射
+    const nonDeletedElements = getNonDeletedElements(this.elements);
+    this.nonDeletedElements = nonDeletedElements.elements;
+    this.nonDeletedElementsMap = nonDeletedElements.elementsMap;
+
+    this.frames = nextFrameLikes;
+    this.nonDeletedFramesLikes = getNonDeletedElements(this.frames).elements;
+
+    // 触发更新回调（重要：这会递增 sceneNonce）
+    this.triggerUpdate();
+  }
+
+  // 触发场景更新（递增 sceneNonce）
+  triggerUpdate() {
+    this.sceneNonce = randomInteger(); // 生成随机整数作为新的 nonce
+
+    // 通知所有注册的回调
+    for (const callback of Array.from(this.callbacks)) {
+      callback();
+    }
+  }
+
+  // 注册更新回调
+  onUpdate(cb: SceneStateCallback): SceneStateCallbackRemover {
+    if (this.callbacks.has(cb)) {
+      throw new Error();
+    }
+    this.callbacks.add(cb);
+    return () => {
+      if (!this.callbacks.has(cb)) {
+        throw new Error();
+      }
+      this.callbacks.delete(cb);
+    };
   }
 }
 ```
+
+**关键发现：**
+
+1. **sceneNonce 的实际类型**：`number | undefined`，而不是初始化为 0
+2. **使用 `randomInteger()` 生成 nonce**：每次更新时生成随机整数，而不是简单递增
+3. **更多的数据结构**：除了基本的 elements，还包括 frames、callbacks 等
+4. **fractional indices 验证**：使用 `validateIndicesThrottled` 进行分数索引验证
+5. **回调机制**：通过 `callbacks` Set 实现观察者模式
 
 ### 元素层级管理
 
@@ -914,12 +998,38 @@ class LayeredRenderer {
 
 ## 总结
 
-Excalidraw 的渲染引擎展示了现代 Web 图形应用的最佳实践：
+通过深入分析 Excalidraw 的实际源码，我们发现其渲染引擎展示了现代 Web 图形应用的最佳实践：
 
-1. **架构设计**：双 Canvas 架构有效分离了静态内容和动态 UI
-2. **性能优化**：视口裁剪、多层缓存、批量渲染等技术的综合运用
-3. **状态管理**：通过 Scene 和 Renderer 的分离，实现了清晰的职责划分
-4. **扩展性**：模块化设计使得渲染引擎易于扩展和维护
+### 核心架构（已验证 ✓）
+
+1. **双 Canvas 架构**
+   - `staticScene` (packages/excalidraw/renderer/staticScene.ts) - 渲染元素本体
+   - `interactiveScene` (packages/excalidraw/renderer/interactiveScene.ts) - 渲染 UI 元素
+
+2. **Renderer 类**（packages/excalidraw/scene/Renderer.ts）
+   - 使用 `memoize` 进行智能缓存
+   - `getRenderableElements()` 返回 { elementsMap, visibleElements }
+   - 视口裁剪通过 `isElementInViewport()` 实现
+
+3. **Scene 类**（packages/element/src/Scene.ts）
+   - 使用 `randomInteger()` 生成 sceneNonce（而非简单递增）
+   - 通过观察者模式（callbacks Set）通知更新
+   - 支持 fractional indices 进行元素排序
+
+### 关键性能优化策略
+
+1. **缓存失效机制**：基于 sceneNonce 的随机整数，每次场景更新时重新生成
+2. **视口裁剪**：只渲染 `isElementInViewport()` 返回 true 的元素
+3. **memoize 缓存**：getRenderableElements 的结果会被缓存，直到 sceneNonce 变化
+4. **throttleRAF 节流**：所有渲染函数都通过 `throttleRAF` 节流到 60fps
+
+### 源码验证要点
+
+- ✓ Renderer.ts 实际位置：`packages/excalidraw/scene/Renderer.ts`
+- ✓ Scene.ts 实际位置：`packages/element/src/Scene.ts`（不在 excalidraw/scene 下）
+- ✓ sceneNonce 使用 randomInteger() 而非递增
+- ✓ destroy() 方法有明确注释说明为何不销毁所有内容
+- ✓ 编辑中的文本元素会被跳过渲染（仅在远程协作时渲染）
 
 这些设计理念和实现技术不仅适用于画板应用，也可以应用到其他需要高性能图形渲染的 Web 应用中。
 

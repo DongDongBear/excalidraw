@@ -2089,22 +2089,32 @@ export class App extends Component<AppProps, AppState> {
   }
 }
 
-// 坐标转换工具
+// 坐标转换工具（源码: packages/common/src/utils.ts:436-456）
+// Excalidraw实际使用的坐标转换函数
 export const viewportCoordsToSceneCoords = (
   { clientX, clientY }: { clientX: number; clientY: number },
-  state: AppState
-): { x: number; y: number } => {
-  const canvas = state.canvas;
-  if (!canvas) return { x: 0, y: 0 };
+  {
+    zoom,
+    offsetLeft,
+    offsetTop,
+    scrollX,
+    scrollY,
+  }: {
+    zoom: Zoom;
+    offsetLeft: number;
+    offsetTop: number;
+    scrollX: number;
+    scrollY: number;
+  },
+) => {
+  // 关键实现细节:
+  // 1. 先减去canvas的offsetLeft/offsetTop (不是getBoundingClientRect)
+  // 2. 除以zoom.value进行缩放转换
+  // 3. 最后减去scrollX/scrollY (而非先减)
+  const x = (clientX - offsetLeft) / zoom.value - scrollX;
+  const y = (clientY - offsetTop) / zoom.value - scrollY;
 
-  const rect = canvas.getBoundingClientRect();
-  const x = clientX - rect.left;
-  const y = clientY - rect.top;
-
-  const sceneX = (x - state.scrollX) / state.zoom.value;
-  const sceneY = (y - state.scrollY) / state.zoom.value;
-
-  return { x: sceneX, y: sceneY };
+  return { x, y };
 };
 ```
 

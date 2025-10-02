@@ -29,16 +29,66 @@ graph TD
 ```json
 {
   "name": "@excalidraw/excalidraw",
+  "version": "0.18.0",
+  "peerDependencies": {
+    "react": "^17.0.2 || ^18.2.0 || ^19.0.0",
+    "react-dom": "^17.0.2 || ^18.2.0 || ^19.0.0"
+  },
   "dependencies": {
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0",
-    "@excalidraw/element": "workspace:*",
-    "@excalidraw/math": "workspace:*",
-    "@excalidraw/utils": "workspace:*",
-    "pako": "^2.0.0",
-    "browser-fs-access": "^0.33.0"
+    "@excalidraw/common": "0.18.0",
+    "@excalidraw/element": "0.18.0",
+    "@excalidraw/math": "0.18.0",
+    "@excalidraw/laser-pointer": "1.3.1",
+    "@excalidraw/mermaid-to-excalidraw": "1.1.3",
+    "@excalidraw/random-username": "1.1.0",
+    "@radix-ui/react-popover": "1.1.6",
+    "@radix-ui/react-tabs": "1.1.3",
+    "browser-fs-access": "0.29.1",
+    "jotai": "2.11.0",
+    "jotai-scope": "0.7.2",
+    "lodash.throttle": "4.1.1",
+    "lodash.debounce": "4.0.8",
+    "nanoid": "3.3.3",
+    "pako": "2.0.3",
+    "perfect-freehand": "1.2.0",
+    "roughjs": "4.6.4",
+    "fractional-indexing": "3.2.0"
   }
 }
+```
+
+#### 关键第三方依赖功能说明
+
+**核心依赖分析 (2025年1月，实际源码验证)**:
+
+```typescript
+// 1. Jotai - 原子状态管理 (v2.11.0) ⭐ 核心状态库
+import { atom, useAtom } from "jotai";
+// 用途: 管理全局状态（协作、UI状态），比 Redux 更轻量
+
+// 2. RoughJS - 手绘风格渲染 (v4.6.4) ⭐ 核心特色
+import rough from "roughjs";
+// 用途: 生成手绘风格图形，Excalidraw 的核心视觉特色
+
+// 3. Perfect Freehand - 自由绘制 (v1.2.0)
+import getStroke from "perfect-freehand";
+// 用途: 生成流畅的手绘线条，支持压感
+
+// 4. Fractional Indexing - 分数索引 (v3.2.0) ⭐ 协作关键
+import { generateKeyBetween } from "fractional-indexing";
+// 用途: 多人协作时的元素排序，避免索引冲突
+
+// 5. Pako - 压缩 (v2.0.3)
+import pako from "pako";
+// 用途: 压缩场景数据，减小文件大小
+
+// 6. Nanoid - ID生成 (v3.3.3)
+import { nanoid } from "nanoid";
+// 用途: 生成唯一元素ID，比 UUID 更短更快
+
+// 7. Browser FS Access - 文件系统 (v0.29.1)
+import { fileOpen, fileSave } from "browser-fs-access";
+// 用途: 现代浏览器文件 API 封装
 ```
 
 #### 核心模块导入分析
@@ -51,9 +101,8 @@ export { serializeAsJSON, loadFromBlob } from "./data";
 export { exportToCanvas, exportToBlob } from "./scene/export";
 
 // packages/excalidraw/components/App.tsx - 核心依赖
-import { newElement, duplicateElement } from "@excalidraw/element";
-import { rotate, getDistance } from "@excalidraw/math";
-import { debounce, throttle } from "@excalidraw/utils";
+import { newElement, mutateElement } from "@excalidraw/element";
+import { rotate, distance } from "@excalidraw/math";
 import { renderScene } from "./scene/render";
 import { hitTest } from "./element/collision";
 ```
